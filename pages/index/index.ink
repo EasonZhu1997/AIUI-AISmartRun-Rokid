@@ -1,26 +1,26 @@
 <script def>
 {
-  "navigationBarTitleText": "Index Page"
+  "navigationBarTitleText": "SmartRun",
+  "description": "SmartRun 跑步助手入口：进入跑步 HUD"
 }
 </script>
 
 <script setup>
 export default {
   data: {
-    greeting: 'Hello JSUI!'
+    subtitle: 'AI 跑步教练 · 眼镜直连蓝牙心率',
   },
-  handleTap() {
-    this.setData({
-      greeting: '你好，世界！'
-    });
-  }
-}
+  openHud() {
+    wx.navigateTo({ url: '/pages/run_hud/index' });
+  },
+};
 </script>
 
 <page>
   <view class="container">
-    <text class="title">{{ greeting }}</text>
-    <button bindtap="handleTap">点击我</button>
+    <text class="title">SmartRun</text>
+    <text class="subtitle">{{ subtitle }}</text>
+    <button class="cta" bindtap="openHud">进入跑步 HUD</button>
   </view>
 </page>
 
@@ -30,26 +30,36 @@ export default {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  padding: 24px 16px;
+  background-color: #000000;
+  border: 2px solid #143a20;
+  border-radius: var(--radius-md, 12px);
 }
 
 .title {
-  color: #40FF5E;
-  width: 100%;
+  color: var(--color-primary, #40ff5e);
+  font-size: 28px;
+  line-height: 32px;
+  font-weight: bold;
   text-align: center;
-  font-size: 24px;
-  line-height: 24px;
-  margin-bottom: 20px;
 }
 
-button {
-  color: #40FF5E;
-  border: 2px solid #40FF5E;
-  border-radius: 12px;
-  box-sizing: border-box;
-  padding: 5px;
-  width: 100px;
-  line-height: 24px;
+.subtitle {
+  color: #8fe0a0;
+  font-size: 13px;
+  line-height: 18px;
+  margin-top: 6px;
   text-align: center;
+}
+
+.cta {
+  margin-top: 16px;
+  min-width: 160px;
+  padding: 10px 14px;
+  text-align: center;
+  color: #031106;
+  background-color: var(--color-primary, #40ff5e);
+  border-radius: var(--radius-md, 12px);
+  font-weight: bold;
 }
 </style>

@@ -38,11 +38,28 @@ UI 信息架构迁移自 FunpizzaSmartRun 的 CXR-L HUD（大字排：心率/配
 - .aix 打包器公开渠道只有 reader；正式打包/签名流程无公开文档
 - 国行眼镜能否绑 Hi Rokid + 海外账号（决定能否参加 7-06 前的海外征集）
 
+## 决策记录
+
+- 2026-07-02 · 用户选 **B（按部就班）**：跳过 7-06 海外征集冲刺，从 Step 1 起做完整版。
+- 2026-07-02 · 真机四台已就位（见 `DEVICES.md`）：ESP32 模拟器 / Chronos 手表(待重刷) /
+  Fenix 8(开广播即用) / Apple Watch(反面)。原采购清单大部分不再需要。
+- 中心端已闭环：**AIUI 眼镜端可直接做 BLE central**（`.claude/skills/aiui-dev/apis-device.md`
+  列出 navigator.bluetooth 全套 GATT API；官方 heart_rate 样例即完整实现）。
+  注意 interactive 门槛：requestDevice/scanDevices/gatt.connect/startNotifications
+  要求 InkView 处于交互态（apis-device.md 原文），息屏行为仍需真机验证。
+
 ## 分步计划
 
-- [x] Step 0 · 调研 + 立项（本轮：官方模板骨架 + aiui-dev skill + 参考样例落盘）
-- [ ] Step 1 · HUD 静态页：把 CXR-L 运动页信息架构做成 index.ink（Craft 预览验收）
-- [ ] Step 2 · BLE 心率：改造官方 heart_rate 样例接入 HUD（扫描→连接→1Hz 刷新→断连重连引导）
+- [x] Step 0 · 调研 + 立项（官方模板骨架 + aiui-dev skill + 参考样例落盘）
+- [x] Step 0.5 · 测试地基：lib/ 9 个纯逻辑模块（HRS/RSC/CSC/CPS/FTMS/PLX 解析 +
+      会话聚合 + HUD 格式化 + 设备识别）+ 13 个 spec 文件 **56 测试全绿**
+      （`python scripts/run_tests_on_hermes.py` = node --test 适配入口）
+- [x] Step 1 · HUD 页初版：`pages/run_hud/index.ink`（CXR-L 定版信息架构：
+      区间点阵 + 心率/配速/步频/时长大字排 + 距离/时钟/数据源小字排 + 教练条 +
+      开始/暂停/结束；演示数据驱动，1s 聚合 setData）。
+      ⏳ 待 Craft（js.rokid.com/craft 或 AIUI Studio）可视化验收后打勾定稿
+- [ ] Step 2 · BLE 心率：改造官方 heart_rate 样例接入 HUD（扫描→连接→1Hz 刷新→断连重连引导）；
+      交付 `tools/esp32_hr_sim/esp32_hr_sim.ino` 模拟器固件
 - [ ] Step 3 · 跑步会话逻辑：计时/配速聚合/心率区间/setData 合并节流
 - [ ] Step 4 · AI 教练：onVoiceWakeup + SpeechRecognition + LanguageModel 流式 + TTS
       （底版：_reference/samples/capabilities/pages/chat/index.ink）

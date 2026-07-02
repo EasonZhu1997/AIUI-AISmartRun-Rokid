@@ -3,5 +3,9 @@
   "version": "1.0.0",
   "description": "A JSUI Agent project",
   "main": "app.js",
-  "dependencies": {}
+  "dependencies": {},
+  "type": "module",
+  "scripts": {
+    "test": "python scripts/run_tests_on_hermes.py"
+  }
 }
