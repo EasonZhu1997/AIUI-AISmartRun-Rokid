@@ -17,10 +17,19 @@
 <script setup>
 import wx from 'wx';
 import { buildCoachSystemPrompt, fallbackCoachReply, summarizeSnapshot } from '../../lib/coach.js';
+import {
+  buildAnonLoginRequest, parseAnonLoginResponse,
+  buildMemoryContextRequest, parseMemoryContext, buildAugmentedQuestion,
+} from '../../lib/coach_api.js';
 
 const STREAM_POLL_MS = 16;
 const ASR_IDLE_TIMEOUT_MS = 5000;
 const SPEECH_LANG = 'zh-CN';
+const COACH_TOKEN_KEY = 'coach_token';           // wx storage 里的鉴权 JWT
+const DEVICE_ID_KEY = 'smartrun_device_id';       // 匿名设备 ID(通用链路)
+const BACKEND_TIMEOUT_MS = 6000;                  // 后端超时 → 降级到内置 LLM
+// AIUI 通用链路 App 共享密钥。⚠️ 仓库转私有后再填真值;占位时匿名直登失败 → 优雅降级到内置 LLM。
+const APP_KEY = '__SET_AFTER_REPO_PRIVATE__';
 
 // Step 4：coach 页先用演示快照。Step 5 会把 run_hud 的 RunSession 提到共享模块，
 // 两页读同一份实时数据；此处 demoSnapshot() 的形状即那份契约。
@@ -65,6 +74,7 @@ export default {
     question: '',
     reply: '说“乐奇”或点下方按钮，问我配速、心率或怎么调整。',
     usedFallback: false,
+    replySource: '',
     lastError: '',
   },
 
@@ -243,26 +253,94 @@ export default {
     return chunks.join('');
   },
 
+  // wx.request Promise 化 + 超时(超时/异常一律 resolve(null) 触发降级)
+  wxRequest(req) {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (r) => { if (!done) { done = true; resolve(r); } };
+      const timer = setTimeout(() => finish(null), BACKEND_TIMEOUT_MS);
+      try {
+        wx.request({
+          ...req,
+          success: (r) => { clearTimeout(timer); finish(r); },
+          fail: () => { clearTimeout(timer); finish(null); },
+        });
+      } catch (_e) { clearTimeout(timer); finish(null); }
+    });
+  },
+
+  // 稳定的匿名设备 ID(通用链路):首启生成一次,存 wx storage 长期不变。
+  ensureDeviceId() {
+    let id = '';
+    try { id = wx.getStorageSync(DEVICE_ID_KEY) || ''; } catch (_e) {}
+    if (!id) {
+      id = 'aiui-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+      try { wx.setStorageSync(DEVICE_ID_KEY, id); } catch (_e) {}
+    }
+    return id;
+  },
+
+  // 取鉴权 token:优先已存的(你的个人 token 或上次匿名直登的);没有则用设备 ID 匿名直登换一个。
+  async ensureToken() {
+    let token = '';
+    try { token = wx.getStorageSync(COACH_TOKEN_KEY) || ''; } catch (_e) {}
+    if (token) return token;
+    const resp = await this.wxRequest(
+      buildAnonLoginRequest({ appKey: APP_KEY, deviceId: this.ensureDeviceId() }),
+    );
+    const t = parseAnonLoginResponse(resp);
+    if (t) { try { wx.setStorageSync(COACH_TOKEN_KEY, t); } catch (_e) {} }
+    return t || '';
+  },
+
+  // 记忆检索(省 token:只从后端取记忆,不让后端跑 LLM);无 token 自动匿名直登;失败 → null,不影响主流程。
+  async fetchMemoryContext(question) {
+    const token = await this.ensureToken();
+    if (!token) return null;
+    const resp = await this.wxRequest(buildMemoryContextRequest({ token, query: question }));
+    if (resp && resp.statusCode === 401) {
+      try { wx.removeStorageSync(COACH_TOKEN_KEY); } catch (_e) {}  // token 过期 → 清掉,下次重新直登
+      return null;
+    }
+    return parseMemoryContext(resp);
+  },
+
   async answer(turnId, question) {
     if (!turnId || this.turnId !== turnId) return;
-    this.setData({ status: 'thinking', reply: '' });
+    this.setData({ status: 'thinking', reply: '', usedFallback: false, replySource: '' });
 
+    const snap = demoSnapshot();
     let finalText = '';
-    let usedFallback = false;
+    let replySource = '';
+
+    // 记忆增强(best-effort,不阻塞):后端取 EverMind/本地记忆;取不到就 null,不影响主流程。
+    let memCtx = null;
+    try { memCtx = await this.fetchMemoryContext(question); } catch (_e) { memCtx = null; }
+    if (this.turnId !== turnId) return;
+
+    // Tier 1(主力)：眼镜内置 DeepSeek V4 Pro,prompt 注入记忆+实时数据 —— 省你的 token、兼容性好
     try {
       if (!this.data.llmAvailable) throw new Error('LLM unavailable');
       const session = await this.ensureSession();
-      const stream = session.promptStreaming(question);
+      const stream = session.promptStreaming(buildAugmentedQuestion(question, snap, memCtx));
       finalText = normalizeText(await this.readAll(stream));
-      if (!finalText) throw new Error('empty reply');
-    } catch (_e) {
-      // 兜底：跑步中不把用户晾在"出错了"，用规则化教练回答
+      if (finalText) {
+        replySource = (memCtx && (memCtx.memories.length || memCtx.profile)) ? 'device+memory' : 'device';
+      } else {
+        throw new Error('empty reply');
+      }
+    } catch (_e) { finalText = ''; }
+
+    // Tier 2：规则兜底(内置模型不可用/离线也绝不把用户晾在"出错了")
+    let usedFallback = false;
+    if (!finalText) {
+      finalText = fallbackCoachReply(snap, question);
       usedFallback = true;
-      finalText = fallbackCoachReply(demoSnapshot(), question);
+      replySource = 'rule';
     }
 
     if (this.turnId !== turnId) return;
-    this.setData({ reply: finalText, usedFallback });
+    this.setData({ reply: finalText, usedFallback, replySource });
     await this.speak(turnId, finalText);
   },
 
@@ -314,6 +392,16 @@ export default {
 
 <page>
   <view class="coach">
+    <view class="avatar-row">
+      <image class="avatar" src="./coach-avatar.png" mode="aspectFill" />
+      <view class="avatar-meta">
+        <text class="avatar-name">SmartRun 教练</text>
+        <text class="avatar-src" ink:if="{{ replySource === 'device+memory' }}">DeepSeek V4 · 记得你的历史</text>
+        <text class="avatar-src" ink:if="{{ replySource === 'device' }}">DeepSeek V4 Pro</text>
+        <text class="avatar-src" ink:if="{{ replySource === 'rule' }}">离线兜底</text>
+      </view>
+    </view>
+
     <view class="stat-row">
       <text class="stat-dot">●</text>
       <text class="stat-text">{{ statLine }}</text>
@@ -338,6 +426,38 @@ export default {
 </page>
 
 <style>
+.avatar-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
+  border: 1px solid #24452f;
+  margin-right: 10px;
+}
+
+.avatar-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.avatar-name {
+  color: var(--color-primary, #40ff5e);
+  font-size: 15px;
+  line-height: 19px;
+  font-weight: bold;
+}
+
+.avatar-src {
+  color: #73a785;
+  font-size: 10px;
+  line-height: 14px;
+}
+
 .coach {
   display: flex;
   flex-direction: column;

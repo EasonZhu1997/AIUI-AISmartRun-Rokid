@@ -38,6 +38,22 @@ UI 信息架构迁移自 FunpizzaSmartRun 的 CXR-L HUD（大字排：心率/配
 - .aix 打包器公开渠道只有 reader；正式打包/签名流程无公开文档
 - 国行眼镜能否绑 Hi Rokid + 海外账号（决定能否参加 7-06 前的海外征集）
 
+## 🎉 部署成功 2026-07-03 · SmartRun 在真实 AIUI 运行时跑起来了
+
+**全链路打通并验证**：本地代码 → GitHub(EasonZhu1997/AIUI-AISmartRun-Rokid) →
+Craft「GitHub 子目录」导入 → 在线打包 `.aix`(2.31MB) → 创建灵珠智能体
+**「SmartRun 跑步教练」Agent ID `06b3763d208e4a29a4063ea302438389`** →
+本地目录绑定该 agent → **运行智能体**。
+- ✅ 首页 index 渲染正确（SmartRun 标题 + 副标题 + CTA 按钮）
+- ✅ **HUD 页 run_hud 渲染正确**（心率区间点阵 + 心率/配速/步频/时长四大字 +
+  距离/时间/数据源=演示 + 「● 等待开始运动」待机态；占位 `--` 是浏览器预览无 BLE 的正确表现）
+- Craft tab 带 defaultAgentId；「运行智能体」下拉可选运行 index/run_hud/coach 任一页
+**遗留**：① 浏览器预览无真实 BLE/语音/LLM，需真眼镜+设备实测心率/教练；
+② 眼镜真机镜像需在眼镜上确认；③ GitHub 仓库导入后应改回私有(Craft 已缓存工程)。
+**踩坑记录**：创建智能体表单的预览图/.aix 非硬必填(空提交也建成了 agent)；
+Craft GitHub 导入只支持公开仓(私有仓报"仓库不存在")；file_upload 只接受会话附件、
+无法上传本地/生成文件；GitHub 细粒度 PAT 不能建仓/改可见性(需用户手动)。
+
 ## 决策记录
 
 - 2026-07-02 · 用户选 **B（按部就班）**：跳过 7-06 海外征集冲刺，从 Step 1 起做完整版。
@@ -85,3 +101,13 @@ UI 信息架构迁移自 FunpizzaSmartRun 的 CXR-L HUD（大字排：心率/配
   `FtmsTreadmillClient.kt`（FTMS flags 解析，未真机验证）—— 逻辑翻译成 JS
 - HUD 设计定版：`relay-apk/.../rokid/RokidManager.kt` buildRunningLayout()
 - 后端（可选）：FastAPI coach 服务已有 SSE 能力，AIUI 侧 wx.createEventSource 可直连
+
+## 2026-07-04 · no-BLE IMU 计步 + 主动语音 + EverMind 记忆教练(P1-P4)
+
+无蓝牙设备也能用 + 眼镜教练接自家后端记忆。全部 85 单测绿(原 66 + 新增 19)。
+- **P1 IMU 计步**(`lib/imu.js` StepDetector + `test/imu.spec.mjs` 8 测):加速度峰值检测+迟滞+不应期→步数/步频/估距/走跑判定;接进 `pages/run_hud`(替换演示源,`new Accelerometer` 喂步检测,步频×步长→速度喂 RunSession)。AGENTS.md 加 `accelerometer` 权限。
+- **P2 主动语音**(`lib/coach.js` `nextProactiveCue` + 4 测):进 Z5 安全降速>整公里>每 5 分>进 Z4;run_hud tick 里 `wx.speech.playTTS` 主动播报。
+- **P3 头像**(`pages/coach/coach-avatar.png` 复用 APK launcher 圆标 + coach 页 avatar 行/样式)。
+- **P4 EverMind 三级教练**(`lib/coach_api.js` + 7 测 + coach 页 `answer()` 改三级):Tier1 后端`/api/coach-svc/coach/chat`(带长效 token[[记忆]],把实时快照拼进 message)→ Tier2 眼镜内置 LLM → Tier3 规则兜底;`wxRequest` 6s 超时降级。
+- **✅ 后端已验证**:直连 8001 带 token → EverMind 个性化回复(叫"朱老师"、记得连跑 6 天)。
+**待办(runtime/ops)**:① nginx `/api/coach-svc/` 转发 POST body bug(直连正常),需当面确认后修生产 nginx;② 眼镜首跑注入 `wx.setStorageSync('coach_token',...)`;③ 重新打包上传 agent(带 accelerometer 权限)才能真机 IMU。

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   summarizeSnapshot, buildCoachSystemPrompt, classifyIntent, fallbackCoachReply,
+  nextProactiveCue,
 } from '../lib/coach.js';
 
 const FULL = {
@@ -75,4 +76,29 @@ test('fallbackCoachReply：通用问题按心率区间给鼓励，绝不返回�
   assert.ok(fallbackCoachReply({ zone: 4 }, '加油').length > 0);
   assert.match(fallbackCoachReply({ zone: 1 }, '嗯'), /轻松|提速|稳/);
   assert.ok(fallbackCoachReply({}, '').length > 0);
+});
+
+test('nextProactiveCue：进 Z5 安全降速优先，且盖过整公里里程碑', () => {
+  const cue = nextProactiveCue({ zone: 3, distanceM: 990 }, { zone: 5, distanceM: 1010, paceSecPerKm: 300 });
+  assert.match(cue, /Z5/);
+  assert.match(cue, /降|呼吸/);
+});
+
+test('nextProactiveCue：跨整公里 → 里程碑播报(带配速)', () => {
+  const cue = nextProactiveCue({ zone: 3, distanceM: 990 }, { zone: 3, distanceM: 1010, paceSecPerKm: 330 });
+  assert.match(cue, /第 1 公里/);
+  assert.match(cue, /5:30\/km/);
+});
+
+test('nextProactiveCue：跨 5 分钟 → 时长播报(带步频)', () => {
+  const cue = nextProactiveCue({ elapsedMs: 299000, distanceM: 800 }, { elapsedMs: 301000, distanceM: 850, cadenceSpm: 176 });
+  assert.match(cue, /5 分钟/);
+  assert.match(cue, /步频 176/);
+});
+
+test('nextProactiveCue：刚进 Z4 → 提醒；无事件 → null', () => {
+  assert.match(nextProactiveCue({ zone: 2 }, { zone: 4 }), /Z4/);
+  assert.equal(nextProactiveCue({ zone: 3, distanceM: 1500, elapsedMs: 120000 },
+                                { zone: 3, distanceM: 1550, elapsedMs: 122000 }), null);
+  assert.equal(nextProactiveCue(null, null), null);
 });

@@ -22,12 +22,16 @@
 // （apis-device.md），断连后不自动重连——引导用户点「连接心率」。
 import { RunSession } from '../../lib/session.js';
 import { parseHeartRateMeasurement, hrZone } from '../../lib/hr.js';
+import { StepDetector } from '../../lib/imu.js';
+import { nextProactiveCue } from '../../lib/coach.js';
 import {
   formatElapsed, formatPace, paceSecPerKmFromKmh, formatDistanceKm, formatBpm,
 } from '../../lib/format.js';
 
 const TICK_MS = 1000;
 const HR_MEASUREMENT_UUID = '00002a37-0000-1000-8000-00805f9b34fb';
+const IMU_HZ = 50;          // 加速度计采样率
+const IMU_STRIDE_M = 0.85;  // 估算步长(m):距离=步频×步长积分,粗估仅供参考
 
 function clockHHmm() {
   const d = new Date();
@@ -59,16 +63,19 @@ export default {
     ],
   },
 
-  onUnload() { this.stopTicker(); this.teardownBle(); },
-  onHide() { this.stopTicker(); },
+  onUnload() { this.stopTicker(); this.stopAccel(); this.teardownBle(); },
+  onHide() { this.stopTicker(); this.stopAccel(); },
   onShow() { if (this.data.running && !this.timer) this.startTicker(); },
 
   // ── 跑步会话 ────────────────────────────────────────────────
   toggleRun() {
     if (!this.data.running) {
       this.session = new RunSession(Date.now());
-      this.demoPhase = 0;
-      this.setData({ running: true, paused: false, coachLine: '' });
+      this.stepDet = new StepDetector({ strideM: IMU_STRIDE_M });
+      this.prevCue = null;
+      this.startAccel();
+      this.setData({ running: true, paused: false });
+      this.speakCue('开始跑步,注意呼吸和落地节奏。');
       this.startTicker();
       return;
     }
@@ -84,14 +91,57 @@ export default {
 
   stopRun() {
     this.stopTicker();
+    this.stopAccel();
     this.session = null;
+    this.stepDet = null;
+    this.prevCue = null;
     this.setData({
       running: false, paused: false,
       bpm: '--', zoneCap: '心率 · bpm', pace: '--:--', cadence: '--',
-      elapsed: '00:00', distance: '--',
+      elapsed: '00:00', distance: '--', sourceTag: '演示',
       coachLine: '● 等待开始运动',
       dots: this.data.dots.map((d) => ({ id: d.id, cls: 'dot' })),
     });
+  },
+
+  // ── IMU 计步(无蓝牙设备兜底:眼镜自带加速度计)──────────────
+  startAccel() {
+    this.stopAccel();
+    if (typeof Accelerometer === 'undefined') { this.imuOk = false; return; }
+    try {
+      const sensor = new Accelerometer({ frequency: IMU_HZ });
+      sensor.addEventListener('reading', () => {
+        if (this.stepDet && this.session && !this.session.paused) {
+          this.stepDet.push(sensor.x, sensor.y, sensor.z, Date.now());
+        }
+      });
+      sensor.addEventListener('error', (e) => {
+        this.imuOk = false;
+        console.error('IMU error', e && e.error);
+      });
+      sensor.start();
+      this.accel = sensor;
+      this.imuOk = true;
+    } catch (e) {
+      this.imuOk = false;
+      console.error('IMU start failed', e);
+    }
+  },
+
+  stopAccel() {
+    if (this.accel) { try { this.accel.stop(); } catch (_e) {} this.accel = null; }
+  },
+
+  // 主动语音教练:显示 + TTS 播报(playTTS 优先,退回 Web speechSynthesis)
+  speakCue(text) {
+    this.setData({ coachLine: '● ' + text });
+    try {
+      if (typeof wx !== 'undefined' && wx.speech && typeof wx.speech.playTTS === 'function') {
+        wx.speech.playTTS(text);
+      } else if (typeof speechSynthesis !== 'undefined' && typeof SpeechSynthesisUtterance !== 'undefined') {
+        speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+      }
+    } catch (_e) {}
   },
 
   startTicker() {
@@ -109,31 +159,50 @@ export default {
     const now = Date.now();
     const hrLive = this.data.bleState === 'connected';
 
-    // 演示源：配速/步频始终演示（Step 3 换真源）；心率仅在 BLE 未连时演示
-    this.demoPhase = (this.demoPhase || 0) + 1;
-    const wobble = Math.sin(this.demoPhase / 9);
-    s.onSpeed(11.5 + wobble * 1.5, now);
-    s.onCadence(Math.round(176 + wobble * 6));
-    if (!hrLive) s.onHeartRate(Math.round(148 + wobble * 14));
+    // 运动数据来源：步频用眼镜 IMU 真实计步(无蓝牙也能用)；
+    //   由「步频×步长」估算瞬时速度喂 RunSession → 复用其距离累加/配速/暂停逻辑。
+    //   心率仅来自 BLE，无 BLE 则显示 --（不再造假演示值）。
+    const cadence = this.stepDet ? this.stepDet.cadenceSpm(now) : 0;
+    const speedKmh = cadence > 0 ? (cadence / 60) * IMU_STRIDE_M * 3.6 : 0;
+    if (!s.paused) {
+      s.onSpeed(speedKmh, now);
+      s.onCadence(cadence);
+    }
 
     const snap = s.snapshot(now);
     const zone = hrZone(snap.bpm ?? 0);
     const paceSec = snap.paused ? null
-      : paceSecPerKmFromKmh(11.5 + wobble * 1.5) ?? snap.avgPaceSecPerKm;
+      : (paceSecPerKmFromKmh(speedKmh) ?? snap.avgPaceSecPerKm);
+
+    let sourceTag;
+    if (hrLive) sourceTag = `心率:${this.data.deviceName}`;
+    else if (cadence > 0) sourceTag = 'IMU 计步';
+    else sourceTag = this.imuOk === false ? 'IMU 不可用' : '眼镜待机';
 
     this.setData({
       bpm: formatBpm(snap.bpm),
       zoneCap: zone > 0 ? `心率 Z${zone} · bpm` : '心率 · bpm',
       pace: formatPace(paceSec),
-      cadence: snap.cadenceSpm != null ? String(snap.cadenceSpm) : '--',
+      cadence: cadence > 0 ? String(cadence) : '--',
       elapsed: formatElapsed(snap.elapsedMs),
       distance: formatDistanceKm(snap.distanceM),
       clock: clockHHmm(),
-      sourceTag: hrLive ? `心率:${this.data.deviceName}` : '演示',
+      sourceTag,
       dots: this.data.dots.map((d) => ({
         id: d.id, cls: d.id <= zone ? 'dot dot-on' : 'dot',
       })),
     });
+
+    // 主动语音教练：里程碑 / 区间变化时不等提问就开口
+    if (!snap.paused) {
+      const cur = {
+        distanceM: snap.distanceM, elapsedMs: snap.elapsedMs,
+        zone, cadenceSpm: cadence, paceSecPerKm: paceSec,
+      };
+      const cue = nextProactiveCue(this.prevCue, cur);
+      if (cue) this.speakCue(cue);
+      this.prevCue = cur;
+    }
   },
 
   // ── BLE 心率（官方 heart_rate 样例模式）───────────────────────
