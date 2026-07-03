@@ -55,7 +55,7 @@ test('fallbackCoachReply：Z5 安全优先，覆盖任何问题意图', () => {
 });
 
 test('fallbackCoachReply：配速问题引用真实配速', () => {
-  assert.match(fallbackCoachReply(FULL, '配速如何'), /5:30\/km/);
+  assert.match(fallbackCoachReply(FULL, '配速如何'), /5:30/);
   assert.equal(
     fallbackCoachReply({ zone: 2 }, '我快吗').includes('两分钟'),
     true, '无配速数据时给引导而非编造',
@@ -87,7 +87,7 @@ test('nextProactiveCue：进 Z5 安全降速优先，且盖过整公里里程碑
 test('nextProactiveCue：跨整公里 → 里程碑播报(带配速)', () => {
   const cue = nextProactiveCue({ zone: 3, distanceM: 990 }, { zone: 3, distanceM: 1010, paceSecPerKm: 330 });
   assert.match(cue, /第 1 公里/);
-  assert.match(cue, /5:30\/km/);
+  assert.match(cue, /5:30/);
 });
 
 test('nextProactiveCue：跨 5 分钟 → 时长播报(带步频)', () => {

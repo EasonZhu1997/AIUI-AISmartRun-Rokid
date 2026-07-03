@@ -72,7 +72,7 @@ export default {
     statLine: '',
     liveTranscript: '',
     question: '',
-    reply: '说“乐奇”或点下方按钮，问我配速、心率或怎么调整。',
+    reply: '点按钮，问配速或心率。',
     usedFallback: false,
     replySource: '',
     lastError: '',
@@ -146,7 +146,7 @@ export default {
       this.recognitionFailed = true;
       this.disposeRecognition();
       this.turnId = '';
-      this.setData({ status: 'idle', reply: '没听清，点按钮再问我一次。', liveTranscript: '' });
+      this.setData({ status: 'idle', reply: '没听清，再点一次。', liveTranscript: '' });
     }, ASR_IDLE_TIMEOUT_MS);
   },
 
@@ -174,7 +174,7 @@ export default {
       this.recognitionFailed = true;
       this.disposeRecognition();
       this.turnId = '';
-      this.setData({ status: 'idle', lastError: (event && event.error) || 'asr error', reply: '语音识别失败，点按钮重试。' });
+      this.setData({ status: 'idle', lastError: (event && event.error) || 'asr error', reply: '识别失败，点重试。' });
     };
     rec.onend = async () => {
       this.clearIdleTimer();
@@ -183,7 +183,7 @@ export default {
       const transcript = normalizeText(this.finalTranscript || this.data.liveTranscript);
       if (!transcript) {
         this.turnId = '';
-        this.setData({ status: 'idle', reply: '没识别到内容，再说一次。' });
+        this.setData({ status: 'idle', reply: '没听到，再说一次。' });
         return;
       }
       this.setData({ question: transcript });
@@ -222,7 +222,7 @@ export default {
   beginTurn(keyword) {
     if (this.data.status === 'thinking' || this.data.status === 'speaking') return;
     if (!this.bindRecognition()) {
-      this.setData({ status: 'idle', reply: '当前环境不支持语音识别。', lastError: 'no SpeechRecognition' });
+      this.setData({ status: 'idle', reply: '此环境不支持语音。', lastError: 'no SpeechRecognition' });
       return;
     }
     this.clearIdleTimer();
@@ -234,7 +234,7 @@ export default {
       this.recognition.start();
     } catch (e) {
       this.turnId = '';
-      this.setData({ status: 'idle', reply: '语音启动失败，点按钮重试。', lastError: errMsg(e) });
+      this.setData({ status: 'idle', reply: '启动失败，点重试。', lastError: errMsg(e) });
     }
   },
 
@@ -418,9 +418,9 @@ export default {
 
     <view class="foot">
       <text class="status-chip status-{{ status }}">{{ status }}</text>
-      <button class="btn-mic" bindtap="toggleAsr">
-        {{ status === 'listening' ? '停止' : '问教练' }}
-      </button>
+      <view class="btn-mic" bindtap="toggleAsr">
+        <text class="btn-mic-txt">{{ status === 'listening' ? '停止' : '问教练' }}</text>
+      </view>
     </view>
   </view>
 </page>
@@ -540,10 +540,15 @@ export default {
 .btn-mic {
   min-width: 110px;
   padding: 8px 14px;
-  text-align: center;
-  color: #031106;
   background-color: var(--color-primary, #40ff5e);
   border-radius: var(--radius-md, 12px);
+}
+
+.btn-mic-txt {
+  color: #031106;
+  font-size: 15px;
+  line-height: 19px;
   font-weight: bold;
+  text-align: center;
 }
 </style>

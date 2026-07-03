@@ -1,14 +1,14 @@
 <script type="application/json" def>
 {
   "navigationBarTitleText": "SmartRun HUD",
-  "description": "跑步实时数据 HUD：BLE 心率直连（0x180D），显示心率、配速、步频、时长、距离与心率区间",
+  "description": "跑步实时 HUD：进页按起跑页所选模式自动开跑。蓝牙模式可连 0x180D 心率；室内原地模式看步数+步频（超慢跑口径），户外看距离配速",
   "schema": {
     "data": {
       "bpm": { "type": "string", "description": "当前心率 bpm，无数据为 --" },
-      "pace": { "type": "string", "description": "当前配速 M:SS/km" },
+      "pace": { "type": "string", "description": "当前配速 M:SS（室内原地不计）" },
       "cadence": { "type": "string", "description": "步频 spm" },
       "elapsed": { "type": "string", "description": "运动时长 mm:ss" },
-      "distance": { "type": "string", "description": "距离 km" }
+      "distVal": { "type": "string", "description": "户外=距离 km；室内原地=步数" }
     }
   }
 }
@@ -20,10 +20,14 @@
 // 配速/步频：暂用演示源（Step 3 接 RSC/FTMS/IMU 后替换），sourceTag 如实标注。
 // interactive 门槛：scan/connect/startNotifications 必须由用户点击触发
 // （apis-device.md），断连后不自动重连——引导用户点「连接心率」。
+import wx from 'wx';
 import { RunSession } from '../../lib/session.js';
 import { parseHeartRateMeasurement, hrZone } from '../../lib/hr.js';
 import { StepDetector } from '../../lib/imu.js';
 import { nextProactiveCue } from '../../lib/coach.js';
+import {
+  MODE_STORAGE_KEY, normalizeMode, modeTag, startCue, isStationary,
+} from '../../lib/modes.js';
 import {
   formatElapsed, formatPace, paceSecPerKmFromKmh, formatDistanceKm, formatBpm,
 } from '../../lib/format.js';
@@ -45,15 +49,19 @@ export default {
     pace: '--:--',
     cadence: '--',
     elapsed: '00:00',
-    distance: '--',
+    distVal: '--',
+    distCap: '距离 · km',
     clock: '--:--',
-    sourceTag: '演示',
-    coachLine: '● 等待开始运动',
+    sourceTag: '待机',
+    coachLine: '● 点开始',
     paused: false,
     running: false,
+    // 模式(index 起跑页选好存 storage):ble=显示连心率钮;stationary=室内原地
+    ble: false,
+    stationary: false,
     // BLE 状态机：idle | scanning | connecting | connected
     bleState: 'idle',
-    bleLabel: '连接心率',
+    bleLabel: '连心率',
     deviceName: '',
     devices: [],
     scanOpen: false,
@@ -61,6 +69,20 @@ export default {
       { id: 5, cls: 'dot' }, { id: 4, cls: 'dot' }, { id: 3, cls: 'dot' },
       { id: 2, cls: 'dot' }, { id: 1, cls: 'dot' },
     ],
+  },
+
+  onLoad() {
+    let saved = null;
+    try { saved = wx.getStorageSync(MODE_STORAGE_KEY); } catch (_e) {}
+    this.mode = normalizeMode(saved);
+    this.setData({
+      ble: this.mode.src === 'ble',
+      stationary: isStationary(this.mode),
+      distCap: isStationary(this.mode) ? '步数 · steps' : '距离 · km',
+      sourceTag: modeTag(this.mode),
+    });
+    // 起跑页点「开始跑步」就是开跑意图 → 进页自动开跑,不再多点一次。
+    this.toggleRun();
   },
 
   onUnload() { this.stopTicker(); this.stopAccel(); this.teardownBle(); },
@@ -75,7 +97,7 @@ export default {
       this.prevCue = null;
       this.startAccel();
       this.setData({ running: true, paused: false });
-      this.speakCue('开始跑步,注意呼吸和落地节奏。');
+      this.speakCue(startCue(this.mode));
       this.startTicker();
       return;
     }
@@ -98,8 +120,9 @@ export default {
     this.setData({
       running: false, paused: false,
       bpm: '--', zoneCap: '心率 · bpm', pace: '--:--', cadence: '--',
-      elapsed: '00:00', distance: '--', sourceTag: '演示',
-      coachLine: '● 等待开始运动',
+      elapsed: '00:00', distVal: '--',
+      sourceTag: modeTag(this.mode),
+      coachLine: '● 已结束，点开始',
       dots: this.data.dots.map((d) => ({ id: d.id, cls: 'dot' })),
     });
   },
@@ -158,12 +181,14 @@ export default {
     if (!s) return;
     const now = Date.now();
     const hrLive = this.data.bleState === 'connected';
+    const stationary = this.data.stationary;
 
     // 运动数据来源：步频用眼镜 IMU 真实计步(无蓝牙也能用)；
-    //   由「步频×步长」估算瞬时速度喂 RunSession → 复用其距离累加/配速/暂停逻辑。
+    //   户外:由「步频×步长」估算瞬时速度喂 RunSession → 距离/配速。
+    //   室内原地(超慢跑口径):不看配速距离,只看步数+步频 → 不喂速度。
     //   心率仅来自 BLE，无 BLE 则显示 --（不再造假演示值）。
     const cadence = this.stepDet ? this.stepDet.cadenceSpm(now) : 0;
-    const speedKmh = cadence > 0 ? (cadence / 60) * IMU_STRIDE_M * 3.6 : 0;
+    const speedKmh = (!stationary && cadence > 0) ? (cadence / 60) * IMU_STRIDE_M * 3.6 : 0;
     if (!s.paused) {
       s.onSpeed(speedKmh, now);
       s.onCadence(cadence);
@@ -171,13 +196,13 @@ export default {
 
     const snap = s.snapshot(now);
     const zone = hrZone(snap.bpm ?? 0);
-    const paceSec = snap.paused ? null
+    const paceSec = (snap.paused || stationary) ? null
       : (paceSecPerKmFromKmh(speedKmh) ?? snap.avgPaceSecPerKm);
 
     let sourceTag;
-    if (hrLive) sourceTag = `心率:${this.data.deviceName}`;
-    else if (cadence > 0) sourceTag = 'IMU 计步';
-    else sourceTag = this.imuOk === false ? 'IMU 不可用' : '眼镜待机';
+    if (hrLive) sourceTag = `蓝牙:${this.data.deviceName}`;
+    else if (this.imuOk === false) sourceTag = 'IMU 不可用';
+    else sourceTag = modeTag(this.mode);
 
     this.setData({
       bpm: formatBpm(snap.bpm),
@@ -185,7 +210,9 @@ export default {
       pace: formatPace(paceSec),
       cadence: cadence > 0 ? String(cadence) : '--',
       elapsed: formatElapsed(snap.elapsedMs),
-      distance: formatDistanceKm(snap.distanceM),
+      distVal: stationary
+        ? String(this.stepDet ? this.stepDet.steps : 0)
+        : formatDistanceKm(snap.distanceM),
       clock: clockHHmm(),
       sourceTag,
       dots: this.data.dots.map((d) => ({
@@ -217,8 +244,8 @@ export default {
     await this.stopScan();
     this.deviceMap = new Map();
     this.setData({
-      bleState: 'scanning', bleLabel: '停止扫描',
-      scanOpen: true, devices: [], coachLine: '● 正在扫描心率设备…',
+      bleState: 'scanning', bleLabel: '停扫描',
+      scanOpen: true, devices: [], coachLine: '● 扫描心率中…',
     });
     try {
       const scan = await navigator.bluetooth.scanDevices({
@@ -238,8 +265,8 @@ export default {
     } catch (e) {
       console.error('HR scan failed', e);
       this.setData({
-        bleState: 'idle', bleLabel: '连接心率', scanOpen: false,
-        coachLine: '● 扫描失败：' + e.message,
+        bleState: 'idle', bleLabel: '连心率', scanOpen: false,
+        coachLine: '● 扫描失败，重试。',
       });
     }
   },
@@ -250,7 +277,7 @@ export default {
       this.scanSession = null;
     }
     if (this.data.bleState === 'scanning') {
-      this.setData({ bleState: 'idle', bleLabel: '连接心率', scanOpen: false, coachLine: '' });
+      this.setData({ bleState: 'idle', bleLabel: '连心率', scanOpen: false, coachLine: '' });
     }
   },
 
@@ -261,8 +288,8 @@ export default {
 
     await this.stopScan();
     this.setData({
-      bleState: 'connecting', bleLabel: '连接中…', scanOpen: false,
-      coachLine: `● 正在连接 ${device.name || '设备'}…`,
+      bleState: 'connecting', bleLabel: '连接中', scanOpen: false,
+      coachLine: '● 连接中…',
     });
     try {
       const server = await device.gatt.connect();
@@ -280,16 +307,16 @@ export default {
       this.bleDevice = device;
 
       this.setData({
-        bleState: 'connected', bleLabel: '断开心率',
+        bleState: 'connected', bleLabel: '断心率',
         deviceName: device.name || '未知设备',
-        coachLine: this.data.running ? '' : '● 心率已连接，点开始进入跑步',
+        coachLine: this.data.running ? '' : '● 心率已连接',
       });
     } catch (e) {
       console.error('HR connect failed', e);
       this.teardownBle();
       this.setData({
-        bleState: 'idle', bleLabel: '连接心率', deviceName: '',
-        coachLine: '● 连接失败：' + e.message,
+        bleState: 'idle', bleLabel: '连心率', deviceName: '',
+        coachLine: '● 连接失败，重试。',
       });
     }
   },
@@ -306,8 +333,8 @@ export default {
     } finally {
       this.teardownBle();
       this.setData({
-        bleState: 'idle', bleLabel: '连接心率', deviceName: '',
-        sourceTag: '演示', coachLine: '',
+        bleState: 'idle', bleLabel: '连心率', deviceName: '',
+        sourceTag: modeTag(this.mode), coachLine: '',
       });
     }
   },
@@ -351,8 +378,8 @@ export default {
 
     <view class="row-minor">
       <view class="metric-sm">
-        <text class="metric-sm-value">{{ distance }}</text>
-        <text class="metric-cap">距离 · km</text>
+        <text class="metric-sm-value">{{ distVal }}</text>
+        <text class="metric-cap">{{ distCap }}</text>
       </view>
       <view class="metric-sm">
         <text class="metric-sm-value">{{ clock }}</text>
@@ -366,7 +393,7 @@ export default {
 
     <view ink:if="{{ scanOpen }}" class="scan-list">
       <text class="scan-title">
-        {{ devices.length > 0 ? '选择心率设备' : '扫描中… 请确认设备已开机广播' }}
+        {{ devices.length > 0 ? '点设备连接' : '扫描中…开设备广播' }}
       </text>
       <view
         ink:for="{{ devices }}"
@@ -384,11 +411,15 @@ export default {
     <text ink:if="{{ coachLine }}" class="coach">{{ coachLine }}</text>
 
     <view class="controls">
-      <button class="btn-primary" bindtap="toggleRun">
-        {{ !running ? '开始' : (paused ? '继续' : '暂停') }}
-      </button>
-      <button class="btn-ble" bindtap="toggleBle">{{ bleLabel }}</button>
-      <button ink:if="{{ running }}" class="btn-ghost" bindtap="stopRun">结束</button>
+      <view class="btn-primary" bindtap="toggleRun">
+        <text class="btn-primary-txt">{{ !running ? '开始' : (paused ? '继续' : '暂停') }}</text>
+      </view>
+      <view ink:if="{{ ble }}" class="btn-ble" bindtap="toggleBle">
+        <text class="btn-ble-txt">{{ bleLabel }}</text>
+      </view>
+      <view ink:if="{{ running }}" class="btn-ghost" bindtap="stopRun">
+        <text class="btn-ghost-txt">结束</text>
+      </view>
     </view>
   </view>
 </page>
@@ -536,32 +567,47 @@ export default {
 .btn-primary {
   min-width: 100px;
   padding: 8px 12px;
-  text-align: center;
-  color: #031106;
   background-color: var(--color-primary, #40ff5e);
   border-radius: var(--radius-md, 12px);
+}
+
+.btn-primary-txt {
+  color: #031106;
+  font-size: 15px;
+  line-height: 19px;
   font-weight: bold;
+  text-align: center;
 }
 
 .btn-ble {
   min-width: 100px;
   padding: 8px 12px;
   margin-left: 10px;
-  text-align: center;
-  color: #8dffab;
   background-color: #132117;
   border: 1px solid #24452f;
   border-radius: var(--radius-md, 12px);
+}
+
+.btn-ble-txt {
+  color: #8dffab;
+  font-size: 14px;
+  line-height: 18px;
+  text-align: center;
 }
 
 .btn-ghost {
   min-width: 80px;
   padding: 8px 12px;
   margin-left: 10px;
-  text-align: center;
-  color: #b9ccc0;
   background-color: #0d1510;
   border: 1px solid #223529;
   border-radius: var(--radius-md, 12px);
+}
+
+.btn-ghost-txt {
+  color: #b9ccc0;
+  font-size: 14px;
+  line-height: 18px;
+  text-align: center;
 }
 </style>
