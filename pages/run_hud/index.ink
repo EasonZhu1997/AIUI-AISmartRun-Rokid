@@ -1,7 +1,7 @@
 <script type="application/json" def>
 {
   "navigationBarTitleText": "SmartRun HUD",
-  "description": "跑步实时数据 HUD：心率、配速、步频、时长、距离与心率区间",
+  "description": "跑步实时数据 HUD：BLE 心率直连（0x180D），显示心率、配速、步频、时长、距离与心率区间",
   "schema": {
     "data": {
       "bpm": { "type": "string", "description": "当前心率 bpm，无数据为 --" },
@@ -15,22 +15,23 @@
 </script>
 
 <script setup>
-// Step 1：HUD 静态页 + 演示数据驱动。信息架构迁移自 FunpizzaSmartRun CXR-L
-// 定版 HUD（RokidManager.buildRunningLayout）：上排大字 心率/配速/步频/时长，
-// 下排小字 距离/时钟/状态，底部教练提示条，左侧心率区间 5 格点阵。
-// Step 2 将把 demo ticker 换成 BLE(0x180D) 数据源，session/format 逻辑不变。
+// Step 2：BLE 心率真链路（官方 bluetooth/heart_rate 样例模式）+ 会话聚合。
+// 心率：navigator.bluetooth 直连标准 HRS(0x180D)，notify 回调喂 RunSession；
+// 配速/步频：暂用演示源（Step 3 接 RSC/FTMS/IMU 后替换），sourceTag 如实标注。
+// interactive 门槛：scan/connect/startNotifications 必须由用户点击触发
+// （apis-device.md），断连后不自动重连——引导用户点「连接心率」。
 import { RunSession } from '../../lib/session.js';
-import { hrZone } from '../../lib/hr.js';
+import { parseHeartRateMeasurement, hrZone } from '../../lib/hr.js';
 import {
   formatElapsed, formatPace, paceSecPerKmFromKmh, formatDistanceKm, formatBpm,
 } from '../../lib/format.js';
 
-const TICK_MS = 1000;   // 官方性能约定：合并字段、1s 聚合一次 setData
+const TICK_MS = 1000;
+const HR_MEASUREMENT_UUID = '00002a37-0000-1000-8000-00805f9b34fb';
 
 function clockHHmm() {
   const d = new Date();
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  return `${d.getHours()}:${mm}`;
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 export default {
@@ -42,20 +43,27 @@ export default {
     elapsed: '00:00',
     distance: '--',
     clock: '--:--',
-    sourceTag: '演示数据',
+    sourceTag: '演示',
     coachLine: '● 等待开始运动',
     paused: false,
     running: false,
+    // BLE 状态机：idle | scanning | connecting | connected
+    bleState: 'idle',
+    bleLabel: '连接心率',
+    deviceName: '',
+    devices: [],
+    scanOpen: false,
     dots: [
       { id: 5, cls: 'dot' }, { id: 4, cls: 'dot' }, { id: 3, cls: 'dot' },
       { id: 2, cls: 'dot' }, { id: 1, cls: 'dot' },
     ],
   },
 
-  onUnload() { this.stopTicker(); },
+  onUnload() { this.stopTicker(); this.teardownBle(); },
   onHide() { this.stopTicker(); },
   onShow() { if (this.data.running && !this.timer) this.startTicker(); },
 
+  // ── 跑步会话 ────────────────────────────────────────────────
   toggleRun() {
     if (!this.data.running) {
       this.session = new RunSession(Date.now());
@@ -99,14 +107,14 @@ export default {
     const s = this.session;
     if (!s) return;
     const now = Date.now();
+    const hrLive = this.data.bleState === 'connected';
 
-    // —— 演示数据源（Step 2 起由 BLE 通知回调喂 s.onXxx，本段整体删除）——
+    // 演示源：配速/步频始终演示（Step 3 换真源）；心率仅在 BLE 未连时演示
     this.demoPhase = (this.demoPhase || 0) + 1;
     const wobble = Math.sin(this.demoPhase / 9);
     s.onSpeed(11.5 + wobble * 1.5, now);
-    s.onHeartRate(Math.round(148 + wobble * 14));
     s.onCadence(Math.round(176 + wobble * 6));
-    // ————————————————————————————————————————————
+    if (!hrLive) s.onHeartRate(Math.round(148 + wobble * 14));
 
     const snap = s.snapshot(now);
     const zone = hrZone(snap.bpm ?? 0);
@@ -121,10 +129,127 @@ export default {
       elapsed: formatElapsed(snap.elapsedMs),
       distance: formatDistanceKm(snap.distanceM),
       clock: clockHHmm(),
+      sourceTag: hrLive ? `心率:${this.data.deviceName}` : '演示',
       dots: this.data.dots.map((d) => ({
         id: d.id, cls: d.id <= zone ? 'dot dot-on' : 'dot',
       })),
     });
+  },
+
+  // ── BLE 心率（官方 heart_rate 样例模式）───────────────────────
+  async toggleBle() {
+    const st = this.data.bleState;
+    if (st === 'connected') { await this.disconnectBle(); return; }
+    if (st === 'scanning') { await this.stopScan(); return; }
+    await this.startScan();
+  },
+
+  async startScan() {
+    await this.stopScan();
+    this.deviceMap = new Map();
+    this.setData({
+      bleState: 'scanning', bleLabel: '停止扫描',
+      scanOpen: true, devices: [], coachLine: '● 正在扫描心率设备…',
+    });
+    try {
+      const scan = await navigator.bluetooth.scanDevices({
+        filters: [{ services: ['heart_rate'] }],
+      });
+      this.scanSession = scan;
+      scan.onDeviceFound((event) => {
+        const device = event.device;
+        this.deviceMap.set(device.id, device);
+        if (!this.data.devices.find((d) => d.id === device.id)) {
+          this.setData({
+            devices: [...this.data.devices,
+              { id: device.id, name: device.name || '未知设备' }],
+          });
+        }
+      });
+    } catch (e) {
+      console.error('HR scan failed', e);
+      this.setData({
+        bleState: 'idle', bleLabel: '连接心率', scanOpen: false,
+        coachLine: '● 扫描失败：' + e.message,
+      });
+    }
+  },
+
+  async stopScan() {
+    if (this.scanSession) {
+      try { await this.scanSession.stop(); } catch (_) {}
+      this.scanSession = null;
+    }
+    if (this.data.bleState === 'scanning') {
+      this.setData({ bleState: 'idle', bleLabel: '连接心率', scanOpen: false, coachLine: '' });
+    }
+  },
+
+  async selectDevice(e) {
+    const id = e.currentTarget.attributes['data-id'];
+    const device = this.deviceMap && this.deviceMap.get(id);
+    if (!device || this.data.bleState === 'connecting') return;
+
+    await this.stopScan();
+    this.setData({
+      bleState: 'connecting', bleLabel: '连接中…', scanOpen: false,
+      coachLine: `● 正在连接 ${device.name || '设备'}…`,
+    });
+    try {
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService('heart_rate');
+      const characteristic = await service.getCharacteristic(HR_MEASUREMENT_UUID);
+      const listener = () => {
+        const m = parseHeartRateMeasurement(characteristic.value);
+        if (m && this.session) this.session.onHeartRate(m.bpm);
+        if (m && !this.session) this.setData({ bpm: formatBpm(m.bpm) });
+      };
+      this.hrCharacteristic = characteristic;
+      this.hrListener = listener;
+      characteristic.addEventListener('characteristicvaluechanged', listener);
+      await characteristic.startNotifications();
+      this.bleDevice = device;
+
+      this.setData({
+        bleState: 'connected', bleLabel: '断开心率',
+        deviceName: device.name || '未知设备',
+        coachLine: this.data.running ? '' : '● 心率已连接，点开始进入跑步',
+      });
+    } catch (e) {
+      console.error('HR connect failed', e);
+      this.teardownBle();
+      this.setData({
+        bleState: 'idle', bleLabel: '连接心率', deviceName: '',
+        coachLine: '● 连接失败：' + e.message,
+      });
+    }
+  },
+
+  async disconnectBle() {
+    try {
+      if (this.hrCharacteristic && this.hrListener) {
+        this.hrCharacteristic.removeEventListener('characteristicvaluechanged', this.hrListener);
+        try { await this.hrCharacteristic.stopNotifications(); } catch (_) {}
+      }
+      if (this.bleDevice) await this.bleDevice.gatt.disconnect();
+    } catch (e) {
+      console.error('HR disconnect failed', e);
+    } finally {
+      this.teardownBle();
+      this.setData({
+        bleState: 'idle', bleLabel: '连接心率', deviceName: '',
+        sourceTag: '演示', coachLine: '',
+      });
+    }
+  },
+
+  teardownBle() {
+    if (this.scanSession) { try { this.scanSession.stop(); } catch (_) {} }
+    this.scanSession = null;
+    this.hrCharacteristic = null;
+    this.hrListener = null;
+    this.bleDevice = null;
+    this.deviceMap = null;
   },
 };
 </script>
@@ -170,12 +295,30 @@ export default {
       </view>
     </view>
 
+    <view ink:if="{{ scanOpen }}" class="scan-list">
+      <text class="scan-title">
+        {{ devices.length > 0 ? '选择心率设备' : '扫描中… 请确认设备已开机广播' }}
+      </text>
+      <view
+        ink:for="{{ devices }}"
+        ink:for-item="device"
+        key="{{ device.id }}"
+        class="scan-item"
+        data-id="{{ device.id }}"
+        bindtap="selectDevice"
+      >
+        <text class="scan-item-name">{{ device.name }}</text>
+        <text class="scan-item-id">{{ device.id }}</text>
+      </view>
+    </view>
+
     <text ink:if="{{ coachLine }}" class="coach">{{ coachLine }}</text>
 
     <view class="controls">
       <button class="btn-primary" bindtap="toggleRun">
         {{ !running ? '开始' : (paused ? '继续' : '暂停') }}
       </button>
+      <button class="btn-ble" bindtap="toggleBle">{{ bleLabel }}</button>
       <button ink:if="{{ running }}" class="btn-ghost" bindtap="stopRun">结束</button>
     </view>
   </view>
@@ -266,6 +409,46 @@ export default {
   font-weight: bold;
 }
 
+.scan-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #0d1510;
+  border: 1px solid #193323;
+  border-radius: var(--radius-md, 12px);
+}
+
+.scan-title {
+  color: #8fe0a0;
+  font-size: 12px;
+  line-height: 16px;
+  margin-bottom: 6px;
+}
+
+.scan-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background-color: #09100b;
+  border: 1px solid #1e3024;
+  border-radius: 8px;
+}
+
+.scan-item-name {
+  color: #dbffe5;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.scan-item-id {
+  color: #73a785;
+  font-size: 10px;
+  line-height: 14px;
+  margin-top: 2px;
+}
+
 .coach {
   color: var(--color-primary, #40ff5e);
   font-size: 12px;
@@ -282,7 +465,7 @@ export default {
 }
 
 .btn-primary {
-  min-width: 120px;
+  min-width: 100px;
   padding: 8px 12px;
   text-align: center;
   color: #031106;
@@ -291,8 +474,19 @@ export default {
   font-weight: bold;
 }
 
-.btn-ghost {
+.btn-ble {
   min-width: 100px;
+  padding: 8px 12px;
+  margin-left: 10px;
+  text-align: center;
+  color: #8dffab;
+  background-color: #132117;
+  border: 1px solid #24452f;
+  border-radius: var(--radius-md, 12px);
+}
+
+.btn-ghost {
+  min-width: 80px;
   padding: 8px 12px;
   margin-left: 10px;
   text-align: center;

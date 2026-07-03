@@ -1,7 +1,8 @@
 {
   "pages": [
     "pages/index/index",
-    "pages/run_hud/index"
+    "pages/run_hud/index",
+    "pages/coach/index"
   ],
   "window": {
     "navigationBarTitleText": "SmartRun"

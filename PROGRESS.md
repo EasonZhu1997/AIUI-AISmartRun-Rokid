@@ -58,8 +58,16 @@ UI 信息架构迁移自 FunpizzaSmartRun 的 CXR-L HUD（大字排：心率/配
       区间点阵 + 心率/配速/步频/时长大字排 + 距离/时钟/数据源小字排 + 教练条 +
       开始/暂停/结束；演示数据驱动，1s 聚合 setData）。
       ⏳ 待 Craft（js.rokid.com/craft 或 AIUI Studio）可视化验收后打勾定稿
-- [ ] Step 2 · BLE 心率：改造官方 heart_rate 样例接入 HUD（扫描→连接→1Hz 刷新→断连重连引导）；
-      交付 `tools/esp32_hr_sim/esp32_hr_sim.ino` 模拟器固件
+- [x] Step 2 · BLE 心率：run_hud 接官方 heart_rate 样例链路（扫描→列表选设备→GATT connect→
+      notify 喂 RunSession→断连引导手动重连；interactive 门槛按规范由点击触发）。
+      交付 `tools/esp32_hr_sim/esp32_hr_sim.ino`（标准 HRS 0x180D 模拟器固件，断连自动重广播）。
+      ⏳ 待真机联调（Fenix 8 开广播心率 / ESP32 模拟器）
+- [x] Step 4 · AI 语音教练：`pages/coach/index.ink`（onVoiceWakeup/点按 → SpeechRecognition →
+      LanguageModel 流式 → speechSynthesis/wx TTS），逻辑抽进 `lib/coach.js`（buildCoachSystemPrompt
+      注入实时数据 + fallbackCoachReply 规则兜底：LLM 离线也给有用回答，Z5 安全优先）。
+      10 用例覆盖。⏳ 待真机验证 LLM/ASR/TTS 宿主可用性
+- [ ] Step 3 · 跑步会话与 coach 共享 RunSession（现 coach 用 demoSnapshot；提到共享模块两页读同一份）
+- [ ] Step 5 · 真机三问验证（息屏存活/1Hz 功耗/断连重连门槛）→ 决定是否需要手机侧兜底
 - [ ] Step 3 · 跑步会话逻辑：计时/配速聚合/心率区间/setData 合并节流
 - [ ] Step 4 · AI 教练：onVoiceWakeup + SpeechRecognition + LanguageModel 流式 + TTS
       （底版：_reference/samples/capabilities/pages/chat/index.ink）

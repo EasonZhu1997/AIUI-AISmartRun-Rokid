@@ -1,3 +1,5 @@
 node_modules/
 *.aix
 .DS_Store
+tools/arduino-cli/
+_synchk.mjs

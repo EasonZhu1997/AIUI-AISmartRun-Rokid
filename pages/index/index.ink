@@ -13,6 +13,9 @@ export default {
   openHud() {
     wx.navigateTo({ url: '/pages/run_hud/index' });
   },
+  openCoach() {
+    wx.navigateTo({ url: '/pages/coach/index' });
+  },
 };
 </script>
 
@@ -21,6 +24,7 @@ export default {
     <text class="title">SmartRun</text>
     <text class="subtitle">{{ subtitle }}</text>
     <button class="cta" bindtap="openHud">进入跑步 HUD</button>
+    <button class="cta cta-ghost" bindtap="openCoach">问 AI 教练</button>
   </view>
 </page>
 
@@ -61,5 +65,12 @@ export default {
   background-color: var(--color-primary, #40ff5e);
   border-radius: var(--radius-md, 12px);
   font-weight: bold;
+}
+
+.cta-ghost {
+  margin-top: 10px;
+  color: #8dffab;
+  background-color: #132117;
+  border: 1px solid #24452f;
 }
 </style>

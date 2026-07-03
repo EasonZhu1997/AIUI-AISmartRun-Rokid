@@ -1,0 +1,429 @@
+<script type="application/json" def>
+{
+  "navigationBarTitleText": "AI 跑步教练",
+  "description": "语音 AI 跑步教练：唤醒或点按开始拾音，教练结合实时心率/配速给出简短语音指导，LLM 不可用时用规则化兜底回答。",
+  "schema": {
+    "data": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "description": "语音回合状态：idle/listening/thinking/speaking/error" },
+        "reply": { "type": "string", "description": "教练最近一句回答文本" }
+      }
+    }
+  }
+}
+</script>
+
+<script setup>
+import wx from 'wx';
+import { buildCoachSystemPrompt, fallbackCoachReply, summarizeSnapshot } from '../../lib/coach.js';
+
+const STREAM_POLL_MS = 16;
+const ASR_IDLE_TIMEOUT_MS = 5000;
+const SPEECH_LANG = 'zh-CN';
+
+// Step 4：coach 页先用演示快照。Step 5 会把 run_hud 的 RunSession 提到共享模块，
+// 两页读同一份实时数据；此处 demoSnapshot() 的形状即那份契约。
+function demoSnapshot() {
+  return {
+    bpm: 156, zone: 4, paceSecPerKm: 342, cadenceSpm: 178,
+    distanceM: 3200, elapsedMs: 1140000, paused: false,
+  };
+}
+
+function normalizeText(v) {
+  return typeof v === 'string' ? v.replace(/[ \t]+/g, ' ').trim() : '';
+}
+
+function errMsg(e) {
+  if (!e) return 'Unknown error';
+  if (typeof e === 'string') return e;
+  return e.message || e.errMsg || String(e);
+}
+
+function extractTranscript(event) {
+  const results = event && event.results;
+  if (!results || typeof results.length !== 'number') return { transcript: '', hasFinal: false };
+  const parts = [];
+  let hasFinal = false;
+  for (let i = 0; i < results.length; i += 1) {
+    const alt = results[i] && results[i][0];
+    if (alt && alt.transcript) parts.push(alt.transcript);
+    if (results[i] && results[i].isFinal) hasFinal = true;
+  }
+  return { transcript: normalizeText(parts.join('')), hasFinal };
+}
+
+export default {
+  data: {
+    status: 'checking',
+    llmAvailable: false,
+    asrAvailable: false,
+    ttsAvailable: false,
+    statLine: '',
+    liveTranscript: '',
+    question: '',
+    reply: '说“乐奇”或点下方按钮，问我配速、心率或怎么调整。',
+    usedFallback: false,
+    lastError: '',
+  },
+
+  async onLoad() {
+    this.session = null;
+    this.recognition = null;
+    this.asrIdleTimer = null;
+    this.turnId = '';
+    this.finalTranscript = '';
+    this.recognitionFailed = false;
+    this.setData({ statLine: summarizeSnapshot(demoSnapshot()) });
+    await this.refreshAvailability();
+  },
+
+  onUnload() {
+    this.recognitionFailed = true;
+    this.turnId = '';
+    this.clearIdleTimer();
+    this.disposeRecognition();
+    if (this.session) {
+      try { this.session.destroy(); } catch (_e) {}
+      this.session = null;
+    }
+  },
+
+  onVoiceWakeup(event) {
+    this.beginTurn(event && event.keyword ? event.keyword : 'wake');
+  },
+
+  detectAsr() { return typeof SpeechRecognition !== 'undefined'; },
+  detectTts() {
+    return (typeof speechSynthesis !== 'undefined' &&
+      typeof SpeechSynthesisUtterance !== 'undefined' &&
+      typeof speechSynthesis.speak === 'function') ||
+      !!(wx && wx.speech && typeof wx.speech.playTTS === 'function');
+  },
+
+  async refreshAvailability() {
+    const asrAvailable = this.detectAsr();
+    const ttsAvailable = this.detectTts();
+    this.setData({ asrAvailable, ttsAvailable, status: 'checking' });
+    try {
+      const a = await LanguageModel.availability();
+      this.setData({ llmAvailable: a === 'available', status: 'idle' });
+    } catch (e) {
+      // LLM 不可用不是致命——兜底教练仍能工作
+      this.setData({ llmAvailable: false, status: 'idle', lastError: errMsg(e) });
+    }
+  },
+
+  async ensureSession() {
+    if (this.session) return this.session;
+    this.session = await LanguageModel.create({
+      initialPrompts: [{ role: 'system', content: buildCoachSystemPrompt(demoSnapshot()) }],
+    });
+    return this.session;
+  },
+
+  clearIdleTimer() {
+    if (this.asrIdleTimer) { clearTimeout(this.asrIdleTimer); this.asrIdleTimer = null; }
+  },
+
+  refreshIdleTimer() {
+    this.clearIdleTimer();
+    if (!this.turnId || this.data.status !== 'listening') return;
+    const turn = this.turnId;
+    this.asrIdleTimer = setTimeout(() => {
+      if (this.turnId !== turn || this.data.status !== 'listening') return;
+      this.recognitionFailed = true;
+      this.disposeRecognition();
+      this.turnId = '';
+      this.setData({ status: 'idle', reply: '没听清，点按钮再问我一次。', liveTranscript: '' });
+    }, ASR_IDLE_TIMEOUT_MS);
+  },
+
+  bindRecognition() {
+    if (!this.detectAsr()) return false;
+    this.disposeRecognition();
+    const rec = new SpeechRecognition();
+    rec.lang = SPEECH_LANG;
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => { this.refreshIdleTimer(); this.setData({ status: 'listening' }); };
+    rec.onaudiostart = () => this.refreshIdleTimer();
+    rec.onspeechstart = () => this.refreshIdleTimer();
+    rec.onresult = (event) => {
+      if (!this.turnId) return;
+      this.refreshIdleTimer();
+      const { transcript, hasFinal } = extractTranscript(event);
+      this.setData({ liveTranscript: transcript });
+      if (hasFinal && transcript) this.finalTranscript = transcript;
+    };
+    rec.onerror = (event) => {
+      this.clearIdleTimer();
+      this.recognitionFailed = true;
+      this.disposeRecognition();
+      this.turnId = '';
+      this.setData({ status: 'idle', lastError: (event && event.error) || 'asr error', reply: '语音识别失败，点按钮重试。' });
+    };
+    rec.onend = async () => {
+      this.clearIdleTimer();
+      if (this.recognition === rec) this.recognition = null;
+      if (!this.turnId || this.recognitionFailed) return;
+      const transcript = normalizeText(this.finalTranscript || this.data.liveTranscript);
+      if (!transcript) {
+        this.turnId = '';
+        this.setData({ status: 'idle', reply: '没识别到内容，再说一次。' });
+        return;
+      }
+      this.setData({ question: transcript });
+      await this.answer(this.turnId, transcript);
+    };
+
+    this.recognition = rec;
+    return true;
+  },
+
+  disposeRecognition() {
+    const rec = this.recognition;
+    if (!rec) return;
+    try {
+      rec.onstart = null; rec.onaudiostart = null; rec.onspeechstart = null;
+      rec.onresult = null; rec.onerror = null; rec.onend = null;
+      rec.abort();
+    } catch (_e) {}
+    this.recognition = null;
+  },
+
+  // 手动触发（眼镜交互态要求 ASR 必须由用户动作发起）
+  toggleAsr() {
+    if (this.data.status === 'listening') {
+      this.recognitionFailed = true;
+      this.clearIdleTimer();
+      this.disposeRecognition();
+      this.turnId = '';
+      this.setData({ status: 'idle', liveTranscript: '' });
+      return;
+    }
+    if (this.data.status === 'thinking' || this.data.status === 'speaking') return;
+    this.beginTurn('manual');
+  },
+
+  beginTurn(keyword) {
+    if (this.data.status === 'thinking' || this.data.status === 'speaking') return;
+    if (!this.bindRecognition()) {
+      this.setData({ status: 'idle', reply: '当前环境不支持语音识别。', lastError: 'no SpeechRecognition' });
+      return;
+    }
+    this.clearIdleTimer();
+    this.finalTranscript = '';
+    this.recognitionFailed = false;
+    this.turnId = `turn-${Date.now()}`;
+    this.setData({ status: 'listening', liveTranscript: '', question: '', usedFallback: false, lastError: '' });
+    try {
+      this.recognition.start();
+    } catch (e) {
+      this.turnId = '';
+      this.setData({ status: 'idle', reply: '语音启动失败，点按钮重试。', lastError: errMsg(e) });
+    }
+  },
+
+  async readAll(stream) {
+    const chunks = [];
+    while (true) {
+      const { done, value } = await stream.read();
+      if (done) break;
+      if (typeof value === 'string' && value.length > 0) {
+        chunks.push(value);
+        this.setData({ reply: chunks.join('') });
+      } else {
+        await new Promise((r) => setTimeout(r, STREAM_POLL_MS));
+      }
+    }
+    return chunks.join('');
+  },
+
+  async answer(turnId, question) {
+    if (!turnId || this.turnId !== turnId) return;
+    this.setData({ status: 'thinking', reply: '' });
+
+    let finalText = '';
+    let usedFallback = false;
+    try {
+      if (!this.data.llmAvailable) throw new Error('LLM unavailable');
+      const session = await this.ensureSession();
+      const stream = session.promptStreaming(question);
+      finalText = normalizeText(await this.readAll(stream));
+      if (!finalText) throw new Error('empty reply');
+    } catch (_e) {
+      // 兜底：跑步中不把用户晾在"出错了"，用规则化教练回答
+      usedFallback = true;
+      finalText = fallbackCoachReply(demoSnapshot(), question);
+    }
+
+    if (this.turnId !== turnId) return;
+    this.setData({ reply: finalText, usedFallback });
+    await this.speak(turnId, finalText);
+  },
+
+  async speak(turnId, text) {
+    const content = normalizeText(text);
+    if (!content || !this.data.ttsAvailable) { this.finishTurn(turnId); return; }
+    try {
+      await this.playTts(content);
+    } catch (e) {
+      this.setData({ lastError: `TTS: ${errMsg(e)}` });
+    }
+    this.finishTurn(turnId);
+  },
+
+  playTts(text) {
+    if (typeof speechSynthesis !== 'undefined' &&
+        typeof SpeechSynthesisUtterance !== 'undefined' &&
+        typeof speechSynthesis.speak === 'function') {
+      return new Promise((resolve, reject) => {
+        try {
+          const u = new SpeechSynthesisUtterance(text);
+          u.lang = SPEECH_LANG;
+          u.onstart = () => this.setData({ status: 'speaking' });
+          u.onend = () => resolve('done');
+          u.onerror = (ev) => reject(new Error(ev && ev.message ? ev.message : 'tts error'));
+          speechSynthesis.speak(u);
+        } catch (e) { reject(e); }
+      });
+    }
+    if (wx && wx.speech && typeof wx.speech.playTTS === 'function') {
+      this.setData({ status: 'speaking' });
+      return new Promise((resolve, reject) => {
+        wx.speech.playTTS({ text, success: () => resolve('done'), fail: reject });
+      });
+    }
+    return Promise.resolve('unsupported');
+  },
+
+  finishTurn(turnId) {
+    if (this.turnId !== turnId && turnId) return;
+    this.clearIdleTimer();
+    this.turnId = '';
+    this.finalTranscript = '';
+    this.recognitionFailed = false;
+    this.setData({ status: 'idle', liveTranscript: '' });
+  },
+};
+</script>
+
+<page>
+  <view class="coach">
+    <view class="stat-row">
+      <text class="stat-dot">●</text>
+      <text class="stat-text">{{ statLine }}</text>
+    </view>
+
+    <view class="reply-box">
+      <text class="reply-text">{{ reply }}</text>
+      <text class="fallback-tag" ink:if="{{ usedFallback }}">规则兜底（LLM 离线）</text>
+    </view>
+
+    <view class="live" ink:if="{{ status === 'listening' }}">
+      <text class="live-text">{{ liveTranscript || '正在聆听…' }}</text>
+    </view>
+
+    <view class="foot">
+      <text class="status-chip status-{{ status }}">{{ status }}</text>
+      <button class="btn-mic" bindtap="toggleAsr">
+        {{ status === 'listening' ? '停止' : '问教练' }}
+      </button>
+    </view>
+  </view>
+</page>
+
+<style>
+.coach {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #000000;
+  border: 2px solid #143a20;
+  border-radius: var(--radius-md, 12px);
+  padding: 14px;
+}
+
+.stat-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-dot {
+  color: var(--color-primary, #40ff5e);
+  font-size: 10px;
+}
+
+.stat-text {
+  color: #8fe0a0;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.reply-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 56px;
+  padding: 10px;
+  border: 1px solid #1c3424;
+  border-radius: var(--radius-md, 12px);
+}
+
+.reply-text {
+  color: var(--color-primary, #40ff5e);
+  font-size: 18px;
+  line-height: 26px;
+}
+
+.fallback-tag {
+  color: #73a785;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.live {
+  display: flex;
+  flex-direction: row;
+}
+
+.live-text {
+  color: #dbffe5;
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.foot {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.status-chip {
+  font-size: 11px;
+  color: #73a785;
+}
+
+.status-listening,
+.status-thinking,
+.status-speaking {
+  color: var(--color-primary, #40ff5e);
+}
+
+.btn-mic {
+  min-width: 110px;
+  padding: 8px 14px;
+  text-align: center;
+  color: #031106;
+  background-color: var(--color-primary, #40ff5e);
+  border-radius: var(--radius-md, 12px);
+  font-weight: bold;
+}
+</style>
