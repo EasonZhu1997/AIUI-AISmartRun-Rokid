@@ -28,6 +28,7 @@ import { nextProactiveCue } from '../../lib/coach.js';
 import {
   MODE_STORAGE_KEY, normalizeMode, modeTag, startCue, isStationary,
 } from '../../lib/modes.js';
+import { writeLiveSnapshot, clearLiveSnapshot } from '../../lib/live.js';
 import {
   formatElapsed, formatPace, paceSecPerKmFromKmh, formatDistanceKm, formatBpm,
 } from '../../lib/format.js';
@@ -87,7 +88,13 @@ export default {
 
   onUnload() { this.stopTicker(); this.stopAccel(); this.teardownBle(); },
   onHide() { this.stopTicker(); this.stopAccel(); },
-  onShow() { if (this.data.running && !this.timer) this.startTicker(); },
+  // 熄屏/浮层回来后:ticker 与加速度计都要恢复,否则步数/步频/距离永久冻结而时长照走。
+  // startAccel 内部先 stopAccel、回调有 session.paused 守卫,暂停态恢复也安全。
+  onShow() {
+    if (!this.data.running) return;
+    if (!this.timer) this.startTicker();
+    if (!this.accel) this.startAccel();
+  },
 
   // ── 跑步会话 ────────────────────────────────────────────────
   toggleRun() {
@@ -114,6 +121,7 @@ export default {
   stopRun() {
     this.stopTicker();
     this.stopAccel();
+    clearLiveSnapshot(wx);   // 结束后清掉,教练不再拿上一段旧数据当"此刻"
     this.session = null;
     this.stepDet = null;
     this.prevCue = null;
@@ -199,8 +207,9 @@ export default {
     const paceSec = (snap.paused || stationary) ? null
       : (paceSecPerKmFromKmh(speedKmh) ?? snap.avgPaceSecPerKm);
 
+    // 数据源角标必须短(140px 列),BLE 设备原名可能很长 → 不拼设备名,只显「蓝牙已连」。
     let sourceTag;
-    if (hrLive) sourceTag = `蓝牙:${this.data.deviceName}`;
+    if (hrLive) sourceTag = '蓝牙已连';
     else if (this.imuOk === false) sourceTag = 'IMU 不可用';
     else sourceTag = modeTag(this.mode);
 
@@ -218,6 +227,13 @@ export default {
       dots: this.data.dots.map((d) => ({
         id: d.id, cls: d.id <= zone ? 'dot dot-on' : 'dot',
       })),
+    });
+
+    // 把真实快照写进 storage,供 coach 页读取(替代假 demoSnapshot,教练看"此刻真实数据")
+    writeLiveSnapshot(wx, {
+      bpm: snap.bpm, zone, paceSecPerKm: paceSec, cadenceSpm: cadence,
+      distanceM: snap.distanceM, elapsedMs: snap.elapsedMs,
+      paused: snap.paused, stationary,
     });
 
     // 主动语音教练：里程碑 / 区间变化时不等提问就开口

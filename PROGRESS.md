@@ -2,6 +2,17 @@
 
 > 每轮开工前必读。规格 → 验收 → 进度 → 阻塞 → 下一步。
 
+## 对抗评审修复轮（2026-07-04 夜 · Opus 复核 8 条确认缺陷）
+
+多智能体对抗评审(4 lens × 3 票复核)确认并已修:
+1. 🔴 run_hud onShow 只恢复 ticker 不恢复加速度计 → 熄屏/浮层后步数步频距离永久冻结。修:onShow running 时补 startAccel。
+2. 🟠 coach 页假 demoSnapshot(156/Z4/3.2km) 与真实模式流矛盾。修:新 lib/live.js 实时快照桥(run_hud 每拍写 wx storage,coach 读),无数据→「暂无运动数据」不编数。
+3. 🟠 sourceTag 拼长设备名撑爆 140px 列。修:BLE 连上只显「蓝牙已连」。
+4. avatar-src 文案缩短(≤15)。
+5-8(后端): goals list[dict] 被 str() 又吐 dict repr(+非 list 会 500)→ _goal_label 按 description/label/kind 取标签;补回 gender/resting_hr/longest_run_km;anon-login phone 唯一约束竞态 catch IntegrityError 回滚重查;测试改用生产真实 goals 形态。
+
+**验收**:眼镜 node 107 全绿(+live.spec 5);后端 hermes 226 全绿(+3)。
+
 ## 本轮（2026-07-04 夜 · 起跑模式选择 + 短话术）
 
 **规格**：① 首页改成起跑模式选择页（参考 -L WorkoutTypes：室内/室外横切维度）——

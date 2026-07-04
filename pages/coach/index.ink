@@ -21,6 +21,7 @@ import {
   buildAnonLoginRequest, parseAnonLoginResponse,
   buildMemoryContextRequest, parseMemoryContext, buildAugmentedQuestion,
 } from '../../lib/coach_api.js';
+import { readLiveSnapshot } from '../../lib/live.js';
 
 const STREAM_POLL_MS = 16;
 const ASR_IDLE_TIMEOUT_MS = 5000;
@@ -31,13 +32,10 @@ const BACKEND_TIMEOUT_MS = 6000;                  // 后端超时 → 降级到�
 // AIUI 通用链路 App 共享密钥。⚠️ 仓库转私有后再填真值;占位时匿名直登失败 → 优雅降级到内置 LLM。
 const APP_KEY = '__SET_AFTER_REPO_PRIVATE__';
 
-// Step 4：coach 页先用演示快照。Step 5 会把 run_hud 的 RunSession 提到共享模块，
-// 两页读同一份实时数据；此处 demoSnapshot() 的形状即那份契约。
-function demoSnapshot() {
-  return {
-    bpm: 156, zone: 4, paceSecPerKm: 342, cadenceSpm: 178,
-    distanceM: 3200, elapsedMs: 1140000, paused: false,
-  };
+// 教练读 run_hud 通过 wx storage 写下的"此刻真实快照"(lib/live.js)。
+// 没在跑步 → 读到 null → summarizeSnapshot 给「暂无运动数据」、兜底也不编数字。
+function liveSnapshot() {
+  return readLiveSnapshot(wx) || {};
 }
 
 function normalizeText(v) {
@@ -85,7 +83,7 @@ export default {
     this.turnId = '';
     this.finalTranscript = '';
     this.recognitionFailed = false;
-    this.setData({ statLine: summarizeSnapshot(demoSnapshot()) });
+    this.setData({ statLine: summarizeSnapshot(liveSnapshot()) });
     await this.refreshAvailability();
   },
 
@@ -128,7 +126,7 @@ export default {
   async ensureSession() {
     if (this.session) return this.session;
     this.session = await LanguageModel.create({
-      initialPrompts: [{ role: 'system', content: buildCoachSystemPrompt(demoSnapshot()) }],
+      initialPrompts: [{ role: 'system', content: buildCoachSystemPrompt(liveSnapshot()) }],
     });
     return this.session;
   },
@@ -309,7 +307,7 @@ export default {
     if (!turnId || this.turnId !== turnId) return;
     this.setData({ status: 'thinking', reply: '', usedFallback: false, replySource: '' });
 
-    const snap = demoSnapshot();
+    const snap = liveSnapshot();
     let finalText = '';
     let replySource = '';
 
@@ -396,8 +394,8 @@ export default {
       <image class="avatar" src="./coach-avatar.png" mode="aspectFill" />
       <view class="avatar-meta">
         <text class="avatar-name">SmartRun 教练</text>
-        <text class="avatar-src" ink:if="{{ replySource === 'device+memory' }}">DeepSeek V4 · 记得你的历史</text>
-        <text class="avatar-src" ink:if="{{ replySource === 'device' }}">DeepSeek V4 Pro</text>
+        <text class="avatar-src" ink:if="{{ replySource === 'device+memory' }}">V4·带记忆</text>
+        <text class="avatar-src" ink:if="{{ replySource === 'device' }}">DeepSeek V4</text>
         <text class="avatar-src" ink:if="{{ replySource === 'rule' }}">离线兜底</text>
       </view>
     </view>
