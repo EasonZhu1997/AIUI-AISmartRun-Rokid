@@ -1,51 +1,22 @@
 <script type="application/json" def>
 {
   "navigationBarTitleText": "SmartRun",
-  "description": "SmartRun 起跑页：选数据源（蓝牙心率/无蓝牙）和场景（户外/室内原地），点开始跑步直接进 HUD 自动开跑",
-  "schema": {
-    "data": {
-      "type": "object",
-      "properties": {
-        "src": { "type": "string", "description": "数据源：ble=蓝牙心率, imu=无蓝牙(眼镜IMU计步)" },
-        "scene": { "type": "string", "description": "场景：out=户外跑, in=室内原地(超慢跑口径)" }
-      }
-    }
-  }
+  "description": "SmartRun 起跑页：一键开始自由跑。进 HUD 后自动尝试连蓝牙心率(连不上就无蓝牙模式、无心率)，距离用眼镜 IMU 估算，零选择、零配置。"
 }
 </script>
 
 <script setup>
 import wx from 'wx';
-import { MODE_STORAGE_KEY, normalizeMode, defaultMode } from '../../lib/modes.js';
 
-// 参考 -L APK WorkoutTypes:室内/室外是横切维度。眼镜端只保留两组必选项,
-// 文案全部超短(跑者没时间读)。可点控件一律 view+text(button 文字渲染不稳)。
+// 极简起跑:不再让用户选模式(蓝牙/无蓝牙、户外/室内)。一律「自由跑」——
+// 按「开始跑步」直接进 HUD 自动开跑;HUD 自己尝试连蓝牙心率,连不上就无蓝牙(无心率),
+// 距离用眼镜 IMU 估算。尽量少操作。
 export default {
   data: {
-    src: 'imu',
-    scene: 'out',
+    subtitle: 'AI 跑步教练 · 一键自由跑',
   },
-
-  onLoad() {
-    let saved = null;
-    try { saved = wx.getStorageSync(MODE_STORAGE_KEY); } catch (_e) {}
-    const m = normalizeMode(saved || defaultMode());
-    this.setData({ src: m.src, scene: m.scene });
-  },
-
-  saveMode() {
-    try {
-      wx.setStorageSync(MODE_STORAGE_KEY, { src: this.data.src, scene: this.data.scene });
-    } catch (_e) {}
-  },
-
-  pickBle() { this.setData({ src: 'ble' }); this.saveMode(); },
-  pickImu() { this.setData({ src: 'imu' }); this.saveMode(); },
-  pickOut() { this.setData({ scene: 'out' }); this.saveMode(); },
-  pickIn() { this.setData({ scene: 'in' }); this.saveMode(); },
 
   startRun() {
-    this.saveMode();
     wx.navigateTo({ url: '/pages/run_hud/index' });
   },
 
@@ -57,38 +28,13 @@ export default {
 
 <page>
   <view class="container">
-    <view class="head-row">
-      <text class="title">SmartRun</text>
-      <text class="subtitle">AI 跑步教练</text>
+    <text class="title">SmartRun</text>
+    <text class="subtitle">{{ subtitle }}</text>
+    <view class="cta" bindtap="startRun">
+      <text class="cta-txt">开始跑步</text>
     </view>
-
-    <view class="opt-row">
-      <text class="opt-label">数据源</text>
-      <view class="chip {{ src === 'ble' ? 'chip-on' : '' }}" bindtap="pickBle">
-        <text class="chip-txt {{ src === 'ble' ? 'chip-txt-on' : '' }}">蓝牙心率</text>
-      </view>
-      <view class="chip {{ src === 'imu' ? 'chip-on' : '' }}" bindtap="pickImu">
-        <text class="chip-txt {{ src === 'imu' ? 'chip-txt-on' : '' }}">无蓝牙</text>
-      </view>
-    </view>
-
-    <view class="opt-row">
-      <text class="opt-label">场景</text>
-      <view class="chip {{ scene === 'out' ? 'chip-on' : '' }}" bindtap="pickOut">
-        <text class="chip-txt {{ scene === 'out' ? 'chip-txt-on' : '' }}">户外跑</text>
-      </view>
-      <view class="chip {{ scene === 'in' ? 'chip-on' : '' }}" bindtap="pickIn">
-        <text class="chip-txt {{ scene === 'in' ? 'chip-txt-on' : '' }}">室内原地</text>
-      </view>
-    </view>
-
-    <view class="cta-row">
-      <view class="cta" bindtap="startRun">
-        <text class="cta-txt">开始跑步</text>
-      </view>
-      <view class="cta-ghost" bindtap="openCoach">
-        <text class="cta-ghost-txt">问教练</text>
-      </view>
+    <view class="cta-ghost" bindtap="openCoach">
+      <text class="cta-ghost-txt">问教练</text>
     </view>
   </view>
 </page>
@@ -97,101 +43,50 @@ export default {
 .container {
   display: flex;
   flex-direction: column;
-  padding: 12px 16px;
+  align-items: center;
+  justify-content: center;
+  padding: 18px 16px;
   background-color: #000000;
   border: 2px solid #143a20;
   border-radius: var(--radius-md, 12px);
 }
 
-.head-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-}
-
 .title {
   color: var(--color-primary, #40ff5e);
-  font-size: 20px;
-  line-height: 24px;
+  font-size: 26px;
+  line-height: 30px;
   font-weight: bold;
+  text-align: center;
 }
 
 .subtitle {
   color: #8fe0a0;
-  font-size: 11px;
-  line-height: 15px;
-  margin-left: 8px;
-}
-
-.opt-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  margin-top: 8px;
-}
-
-.opt-label {
-  color: #73a785;
-  font-size: 11px;
-  line-height: 15px;
-  width: 44px;
-}
-
-.chip {
-  min-width: 88px;
-  padding: 5px 10px;
-  margin-left: 8px;
-  background-color: #0d1510;
-  border: 1px solid #24452f;
-  border-radius: var(--radius-md, 12px);
-}
-
-.chip-on {
-  background-color: #143a20;
-  border: 1px solid var(--color-primary, #40ff5e);
-}
-
-.chip-txt {
-  color: #73a785;
-  font-size: 13px;
-  line-height: 17px;
+  font-size: 12px;
+  line-height: 16px;
+  margin-top: 6px;
   text-align: center;
 }
 
-.chip-txt-on {
-  color: var(--color-primary, #40ff5e);
-  font-weight: bold;
-}
-
-.cta-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: center;
-  margin-top: 10px;
-}
-
 .cta {
-  min-width: 132px;
-  padding: 8px 14px;
+  margin-top: 16px;
+  min-width: 168px;
+  padding: 11px 16px;
   background-color: var(--color-primary, #40ff5e);
   border-radius: var(--radius-md, 12px);
 }
 
 .cta-txt {
   color: #031106;
-  font-size: 15px;
-  line-height: 19px;
+  font-size: 17px;
+  line-height: 21px;
   font-weight: bold;
   text-align: center;
 }
 
 .cta-ghost {
-  min-width: 88px;
+  margin-top: 10px;
+  min-width: 100px;
   padding: 8px 14px;
-  margin-left: 10px;
   background-color: #132117;
   border: 1px solid #24452f;
   border-radius: var(--radius-md, 12px);

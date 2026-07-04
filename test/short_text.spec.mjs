@@ -3,7 +3,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fallbackCoachReply, nextProactiveCue } from '../lib/coach.js';
-import { startCue } from '../lib/modes.js';
 
 const MAX_CODEPOINTS = 18;   // ≈15 汉字 + 数字/标点余量
 
@@ -42,7 +41,3 @@ test('nextProactiveCue：四类主动提示全部 ≤15 字', () => {
   for (const c of cues) assertShort(c, `cue: ${c}`);
 });
 
-test('startCue：两种场景开跑语音 ≤15 字', () => {
-  assertShort(startCue({ src: 'imu', scene: 'out' }), 'startCue out');
-  assertShort(startCue({ src: 'ble', scene: 'in' }), 'startCue in');
-});

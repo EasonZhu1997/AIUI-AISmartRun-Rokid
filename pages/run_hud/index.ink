@@ -15,19 +15,15 @@
 </script>
 
 <script setup>
-// Step 2：BLE 心率真链路（官方 bluetooth/heart_rate 样例模式）+ 会话聚合。
-// 心率：navigator.bluetooth 直连标准 HRS(0x180D)，notify 回调喂 RunSession；
-// 配速/步频：暂用演示源（Step 3 接 RSC/FTMS/IMU 后替换），sourceTag 如实标注。
-// interactive 门槛：scan/connect/startNotifications 必须由用户点击触发
-// （apis-device.md），断连后不自动重连——引导用户点「连接心率」。
+// 极简自由跑 HUD:进页自动开跑,零配置。
+//   心率：进页自动尝试连蓝牙 HRS(0x180D)——扫到第一个心率设备就自动连,连不上/无设备
+//     就无蓝牙模式(心率恒 --)。断连后一键「连心率」重连(interactive 门槛,须用户点)。
+//   距离/配速/步频：眼镜自带加速度计计步 → 步长积分估算(无需任何外设,粗估仅供参考)。
 import wx from 'wx';
 import { RunSession } from '../../lib/session.js';
 import { parseHeartRateMeasurement, hrZone } from '../../lib/hr.js';
 import { StepDetector } from '../../lib/imu.js';
 import { nextProactiveCue } from '../../lib/coach.js';
-import {
-  MODE_STORAGE_KEY, normalizeMode, modeTag, startCue, isStationary,
-} from '../../lib/modes.js';
 import { writeLiveSnapshot, clearLiveSnapshot } from '../../lib/live.js';
 import {
   formatElapsed, formatPace, paceSecPerKmFromKmh, formatDistanceKm, formatBpm,
@@ -37,6 +33,8 @@ const TICK_MS = 1000;
 const HR_MEASUREMENT_UUID = '00002a37-0000-1000-8000-00805f9b34fb';
 const IMU_HZ = 50;          // 加速度计采样率
 const IMU_STRIDE_M = 0.85;  // 估算步长(m):距离=步频×步长积分,粗估仅供参考
+const AUTO_BLE_TIMEOUT_MS = 6000;   // 自动连蓝牙:6s 没扫到心率设备就静默进无蓝牙模式
+const START_CUE = '开跑，呼吸放稳。';
 
 function clockHHmm() {
   const d = new Date();
@@ -50,17 +48,13 @@ export default {
     pace: '--:--',
     cadence: '--',
     elapsed: '00:00',
-    distVal: '--',
-    distCap: '距离 · km',
+    distVal: '0.00',
     clock: '--:--',
-    sourceTag: '待机',
-    coachLine: '● 点开始',
+    sourceTag: '眼镜 IMU',
+    coachLine: '● 准备开跑…',
     paused: false,
     running: false,
-    // 模式(index 起跑页选好存 storage):ble=显示连心率钮;stationary=室内原地
-    ble: false,
-    stationary: false,
-    // BLE 状态机：idle | scanning | connecting | connected
+    // BLE 状态机：idle | scanning | connecting | connected。未连时显示「连心率」按钮做兜底。
     bleState: 'idle',
     bleLabel: '连心率',
     deviceName: '',
@@ -73,17 +67,9 @@ export default {
   },
 
   onLoad() {
-    let saved = null;
-    try { saved = wx.getStorageSync(MODE_STORAGE_KEY); } catch (_e) {}
-    this.mode = normalizeMode(saved);
-    this.setData({
-      ble: this.mode.src === 'ble',
-      stationary: isStationary(this.mode),
-      distCap: isStationary(this.mode) ? '步数 · steps' : '距离 · km',
-      sourceTag: modeTag(this.mode),
-    });
-    // 起跑页点「开始跑步」就是开跑意图 → 进页自动开跑,不再多点一次。
+    // 一键自由跑:进页立即开跑(IMU 计距),并自动尝试连蓝牙心率(连不上就无蓝牙、无心率)。
     this.toggleRun();
+    this.autoConnectBle();
   },
 
   onUnload() { this.stopTicker(); this.stopAccel(); this.teardownBle(); },
@@ -104,7 +90,7 @@ export default {
       this.prevCue = null;
       this.startAccel();
       this.setData({ running: true, paused: false });
-      this.speakCue(startCue(this.mode));
+      this.speakCue(START_CUE);
       this.startTicker();
       return;
     }
@@ -128,11 +114,16 @@ export default {
     this.setData({
       running: false, paused: false,
       bpm: '--', zoneCap: '心率 · bpm', pace: '--:--', cadence: '--',
-      elapsed: '00:00', distVal: '--',
-      sourceTag: modeTag(this.mode),
+      elapsed: '00:00', distVal: '0.00',
+      sourceTag: this.imuSourceTag(),
       coachLine: '● 已结束，点开始',
       dots: this.data.dots.map((d) => ({ id: d.id, cls: 'dot' })),
     });
+  },
+
+  // 无蓝牙时的数据源角标(短,140px 列):加速度计可用=眼镜 IMU,否则不可用。
+  imuSourceTag() {
+    return this.imuOk === false ? 'IMU 不可用' : '眼镜 IMU';
   },
 
   // ── IMU 计步(无蓝牙设备兜底:眼镜自带加速度计)──────────────
@@ -189,14 +180,11 @@ export default {
     if (!s) return;
     const now = Date.now();
     const hrLive = this.data.bleState === 'connected';
-    const stationary = this.data.stationary;
 
-    // 运动数据来源：步频用眼镜 IMU 真实计步(无蓝牙也能用)；
-    //   户外:由「步频×步长」估算瞬时速度喂 RunSession → 距离/配速。
-    //   室内原地(超慢跑口径):不看配速距离,只看步数+步频 → 不喂速度。
-    //   心率仅来自 BLE，无 BLE 则显示 --（不再造假演示值）。
+    // 步频用眼镜 IMU 真实计步(无外设也能用),由「步频×步长」估算瞬时速度喂 RunSession
+    //   → 复用其距离累加/配速逻辑。心率仅来自 BLE,无 BLE 则恒 --(不造假)。
     const cadence = this.stepDet ? this.stepDet.cadenceSpm(now) : 0;
-    const speedKmh = (!stationary && cadence > 0) ? (cadence / 60) * IMU_STRIDE_M * 3.6 : 0;
+    const speedKmh = cadence > 0 ? (cadence / 60) * IMU_STRIDE_M * 3.6 : 0;
     if (!s.paused) {
       s.onSpeed(speedKmh, now);
       s.onCadence(cadence);
@@ -204,14 +192,11 @@ export default {
 
     const snap = s.snapshot(now);
     const zone = hrZone(snap.bpm ?? 0);
-    const paceSec = (snap.paused || stationary) ? null
+    const paceSec = snap.paused ? null
       : (paceSecPerKmFromKmh(speedKmh) ?? snap.avgPaceSecPerKm);
 
-    // 数据源角标必须短(140px 列),BLE 设备原名可能很长 → 不拼设备名,只显「蓝牙已连」。
-    let sourceTag;
-    if (hrLive) sourceTag = '蓝牙已连';
-    else if (this.imuOk === false) sourceTag = 'IMU 不可用';
-    else sourceTag = modeTag(this.mode);
+    // 数据源角标短(140px 列):连上=蓝牙 HR;否则无蓝牙(眼镜 IMU / IMU 不可用)。
+    const sourceTag = hrLive ? '蓝牙 HR' : this.imuSourceTag();
 
     this.setData({
       bpm: formatBpm(snap.bpm),
@@ -219,9 +204,7 @@ export default {
       pace: formatPace(paceSec),
       cadence: cadence > 0 ? String(cadence) : '--',
       elapsed: formatElapsed(snap.elapsedMs),
-      distVal: stationary
-        ? String(this.stepDet ? this.stepDet.steps : 0)
-        : formatDistanceKm(snap.distanceM),
+      distVal: formatDistanceKm(snap.distanceM),
       clock: clockHHmm(),
       sourceTag,
       dots: this.data.dots.map((d) => ({
@@ -232,8 +215,7 @@ export default {
     // 把真实快照写进 storage,供 coach 页读取(替代假 demoSnapshot,教练看"此刻真实数据")
     writeLiveSnapshot(wx, {
       bpm: snap.bpm, zone, paceSecPerKm: paceSec, cadenceSpm: cadence,
-      distanceM: snap.distanceM, elapsedMs: snap.elapsedMs,
-      paused: snap.paused, stationary,
+      distanceM: snap.distanceM, elapsedMs: snap.elapsedMs, paused: snap.paused,
     });
 
     // 主动语音教练：里程碑 / 区间变化时不等提问就开口
@@ -249,6 +231,37 @@ export default {
   },
 
   // ── BLE 心率（官方 heart_rate 样例模式）───────────────────────
+  // 进页自动尝试连心率:扫到第一个心率设备就自动连。6s 没扫到 → 静默进无蓝牙模式。
+  // 若平台要求用户手势才能扫描(onLoad 无手势被拒),catch 静默降级,用户可点「连心率」兜底。
+  async autoConnectBle() {
+    if (typeof navigator === 'undefined' || !navigator.bluetooth
+        || typeof navigator.bluetooth.scanDevices !== 'function') {
+      return;  // 无 BLE 能力(如浏览器渲染)→ 无蓝牙模式
+    }
+    if (this.data.bleState !== 'idle') return;
+    this.autoPicked = false;
+    this.setData({ bleState: 'scanning', coachLine: '● 找心率设备…' });
+    try {
+      const scan = await navigator.bluetooth.scanDevices({ filters: [{ services: ['heart_rate'] }] });
+      this.scanSession = scan;
+      scan.onDeviceFound((event) => {
+        if (this.autoPicked) return;
+        this.autoPicked = true;
+        this.connectDevice(event.device);   // 扫到第一个就自动连
+      });
+      setTimeout(() => {
+        if (!this.autoPicked && this.data.bleState === 'scanning') {
+          this.stopScan();
+          this.setData({ coachLine: this.data.running ? '' : '● 无蓝牙，用 IMU 计距' });
+        }
+      }, AUTO_BLE_TIMEOUT_MS);
+    } catch (_e) {
+      // 无设备权限 / 需手势被拒 → 静默降级,无蓝牙模式(距离仍走 IMU)
+      this.scanSession = null;
+      this.setData({ bleState: 'idle', coachLine: '' });
+    }
+  },
+
   async toggleBle() {
     const st = this.data.bleState;
     if (st === 'connected') { await this.disconnectBle(); return; }
@@ -297,11 +310,18 @@ export default {
     }
   },
 
+  // 手动列表点选(自动连失败时的兜底)。
   async selectDevice(e) {
     const id = e.currentTarget.attributes['data-id'];
     const device = this.deviceMap && this.deviceMap.get(id);
     if (!device || this.data.bleState === 'connecting') return;
+    await this.stopScan();
+    await this.connectDevice(device);
+  },
 
+  // 连一个心率设备 + 订阅 notify(自动连与手动连共用)。
+  async connectDevice(device) {
+    if (!device || this.data.bleState === 'connecting') return;
     await this.stopScan();
     this.setData({
       bleState: 'connecting', bleLabel: '连接中', scanOpen: false,
@@ -350,7 +370,7 @@ export default {
       this.teardownBle();
       this.setData({
         bleState: 'idle', bleLabel: '连心率', deviceName: '',
-        sourceTag: modeTag(this.mode), coachLine: '',
+        sourceTag: this.imuSourceTag(), coachLine: '',
       });
     }
   },
@@ -395,7 +415,7 @@ export default {
     <view class="row-minor">
       <view class="metric-sm">
         <text class="metric-sm-value">{{ distVal }}</text>
-        <text class="metric-cap">{{ distCap }}</text>
+        <text class="metric-cap">距离 · km</text>
       </view>
       <view class="metric-sm">
         <text class="metric-sm-value">{{ clock }}</text>
@@ -430,7 +450,7 @@ export default {
       <view class="btn-primary" bindtap="toggleRun">
         <text class="btn-primary-txt">{{ !running ? '开始' : (paused ? '继续' : '暂停') }}</text>
       </view>
-      <view ink:if="{{ ble }}" class="btn-ble" bindtap="toggleBle">
+      <view ink:if="{{ bleState !== 'connected' }}" class="btn-ble" bindtap="toggleBle">
         <text class="btn-ble-txt">{{ bleLabel }}</text>
       </view>
       <view ink:if="{{ running }}" class="btn-ghost" bindtap="stopRun">
