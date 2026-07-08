@@ -36,6 +36,7 @@ test('public project metadata uses AISmartRun', () => {
   assert.equal(pkg.scripts['preview:check'], 'node tools/validate_previews.mjs');
   assert.equal(pkg.scripts['verify:release'], 'node tools/verify_release.mjs');
   assert.equal(readJson('app.json').window.navigationBarTitleText, 'AISmartRun');
+  assert.deepEqual(readJson('app.json').window.viewport, { width: 'device-width' });
   assert.match(readText('AGENTS.md'), /\*\*Name\*\*: AISmartRun/);
   assert.match(readText('AGENTS.md'), /\*\*Version\*\*: 0\.1\.0/);
   assert.match(readText('docs/AISmartRun_PRD.md'), /版本：0\.1\.0/);
@@ -62,12 +63,12 @@ test('formal home is the default page and run HUD remains registered', () => {
 });
 
 test('primary AIUI surfaces use native card containers', () => {
-  assert.match(readText('pages/index/index.ink'), /<card class="home-card">/);
+  assert.match(readText('pages/index/index.ink'), /<card class="home-card" role="group">/);
   const runHud = readText('pages/run_hud/index.ink');
-  assert.match(runHud, /<card class="hud">/);
-  assert.match(readText('pages/bluetooth/index.ink'), /<card class="device-card">/);
-  assert.match(readText('pages/settings/index.ink'), /<card class="settings-card">/);
-  assert.match(readText('pages/coach/index.ink'), /<card class="coach">/);
+  assert.match(runHud, /<card class="hud" role="group">/);
+  assert.match(readText('pages/bluetooth/index.ink'), /<card class="device-card" role="group">/);
+  assert.match(readText('pages/settings/index.ink'), /<card class="settings-card" role="group">/);
+  assert.match(readText('pages/coach/index.ink'), /<card class="coach" role="group">/);
   assert.doesNotMatch(runHud, /ink:for="\{\{ dots \}\}"/);
   assert.doesNotMatch(runHud, /ink:for="\{\{ devices \}\}"/);
   assert.doesNotMatch(runHud, /\{\{\s*item\./);
@@ -79,6 +80,9 @@ test('page key handlers support preview and glasses activation where needed', ()
   assert.match(home, /openRun\(\)/);
   assert.match(home, /openBluetooth\(\)/);
   assert.match(home, /bindtap="openBluetooth"/);
+  assert.match(home, /<view class="actions" role="navigation">/);
+  assert.match(home, /<button class="\{\{ deviceClass \}\}" bindtap="openBluetooth" tabindex="0">/);
+  assert.match(home, /<button class="\{\{ primaryClass \}\}" bindtap="openRun" tabindex="1">/);
   assert.doesNotMatch(home, /openSettings\(\)/);
   assert.match(home, /statusText:\s*'已就绪'/);
   // 首页只做就绪陈述,不建立蓝牙连接(连接由跑步 HUD 完成,避免"连了又断"的假承诺)
@@ -88,7 +92,6 @@ test('page key handlers support preview and glasses activation where needed', ()
   assert.match(home, /onVoiceWakeup\(\)/);
   assert.match(home, /code === 'Backspace'/);
   assert.match(home, /wx\.exitMiniProgram\(\)/);
-  assert.doesNotMatch(home, /<button\b/);
 
   const bluetooth = readText('pages/bluetooth/index.ink');
   assert.match(bluetooth, /onKeyUp\(event\)/);
@@ -97,12 +100,24 @@ test('page key handlers support preview and glasses activation where needed', ()
   assert.match(bluetooth, /toggleScan\(\)/);
   assert.match(bluetooth, /toggleAutoHeart\(\)/);
   assert.match(bluetooth, /forgetDevice\(\)/);
-  assert.doesNotMatch(bluetooth, /<button\b/);
+  assert.match(bluetooth, /<view class="device-list" role="navigation">/);
+  assert.match(bluetooth, /bindtap="selectPreferredDevice" tabindex="0"/);
+  assert.match(bluetooth, /bindtap="toggleScan" tabindex="1"/);
+  assert.match(bluetooth, /bindtap="toggleAutoHeart" tabindex="2"/);
+  assert.match(bluetooth, /bindtap="forgetDevice" tabindex="3"/);
+  assert.match(bluetooth, /bindtap="openSettings" tabindex="4"/);
+  assert.match(bluetooth, /bindtap="openRun" tabindex="5"/);
 
   const settings = readText('pages/settings/index.ink');
   assert.match(settings, /onKeyUp\(event\)/);
   assert.match(settings, /code === 'Backspace'/);
   assert.match(settings, /wx\.navigateBack\(\{ delta: 1 \}\)/);
+  assert.match(settings, /<view class="settings-list" role="navigation">/);
+  assert.match(settings, /bindtap="cycleStride" tabindex="0"/);
+  assert.match(settings, /bindtap="toggleHeart" tabindex="1"/);
+  assert.match(settings, /bindtap="toggleVoice" tabindex="2"/);
+  assert.match(settings, /bindtap="toggleMemory" tabindex="3"/);
+  assert.match(settings, /bindtap="openRun" tabindex="4"/);
 
   const coach = readText('pages/coach/index.ink');
   assert.match(coach, /onKeyUp\(event\)/);
@@ -110,6 +125,8 @@ test('page key handlers support preview and glasses activation where needed', ()
   assert.match(coach, /cancelTurn\(\)/);
   assert.match(coach, /this\.toggleAsr\(\);/);
   assert.match(coach, /btn-mic btn-selected/);
+  assert.match(coach, /<view class="coach-bottom" role="navigation">/);
+  assert.match(coach, /bindtap="toggleAsr" tabindex="0"/);
   assert.match(coach, /recordCoachTurn\(question, reply, snapshot, source\)/);
   assert.match(coach, /buildAiuiRecordRequest\(\{/);
   assert.match(coach, /parseAiuiRecordResponse\(resp\)/);

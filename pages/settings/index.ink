@@ -161,7 +161,7 @@ export default {
 
 <page>
   <view class="settings-wrap">
-    <card class="settings-card">
+    <card class="settings-card" role="group">
       <view class="settings-top">
         <view class="title-row">
           <image class="runner-logo" src="../../assets/smartrun-runner-48.png" mode="aspectFit" />
@@ -170,28 +170,30 @@ export default {
         <text class="status-chip">{{ statusText }}</text>
       </view>
 
-      <view class="{{ rowStrideClass }}" bindtap="cycleStride">
-        <text class="setting-name">步长</text>
-        <text class="setting-value">{{ strideLabel }}</text>
-      </view>
-      <view class="{{ rowHeartClass }}" bindtap="toggleHeart">
-        <text class="setting-name">自动心率</text>
-        <text class="setting-value">{{ heartLabel }}</text>
-      </view>
-      <view class="{{ rowVoiceClass }}" bindtap="toggleVoice">
-        <text class="setting-name">语音提示</text>
-        <text class="setting-value">{{ voiceLabel }}</text>
-      </view>
-      <view class="{{ rowMemoryClass }}" bindtap="toggleMemory">
-        <text class="setting-name">记忆增强</text>
-        <text class="setting-value">{{ memoryLabel }}</text>
+      <view class="settings-list" role="navigation">
+        <button class="{{ rowStrideClass }}" bindtap="cycleStride" tabindex="0">
+          <text class="setting-name">步长</text>
+          <text class="setting-value">{{ strideLabel }}</text>
+        </button>
+        <button class="{{ rowHeartClass }}" bindtap="toggleHeart" tabindex="1">
+          <text class="setting-name">自动心率</text>
+          <text class="setting-value">{{ heartLabel }}</text>
+        </button>
+        <button class="{{ rowVoiceClass }}" bindtap="toggleVoice" tabindex="2">
+          <text class="setting-name">语音提示</text>
+          <text class="setting-value">{{ voiceLabel }}</text>
+        </button>
+        <button class="{{ rowMemoryClass }}" bindtap="toggleMemory" tabindex="3">
+          <text class="setting-name">记忆增强</text>
+          <text class="setting-value">{{ memoryLabel }}</text>
+        </button>
       </view>
 
       <view class="settings-footer">
         <text class="footer-note">跑前设置</text>
-        <view class="run-action" bindtap="openRun">
+        <button class="run-action" bindtap="openRun" tabindex="4">
           <text class="run-action-text">开跑</text>
-        </view>
+        </button>
       </view>
     </card>
   </view>
@@ -247,6 +249,11 @@ export default {
   font-family: monospace;
 }
 
+.settings-list {
+  display: flex;
+  flex-direction: column;
+}
+
 .status-chip {
   height: 24px;
   padding: 0 9px;
@@ -265,9 +272,9 @@ export default {
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
+  padding: 0 12px;
   height: 43px;
   margin-bottom: 5px;
-  padding: 0 12px;
   border: 2px solid var(--color-primary-40, rgba(64, 255, 94, 0.4));
   border-radius: 12px;
   background-color: #000000;
@@ -315,6 +322,7 @@ export default {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  padding: 0;
   width: 96px;
   height: 32px;
   border: 3px solid var(--color-primary, #40ff5e);

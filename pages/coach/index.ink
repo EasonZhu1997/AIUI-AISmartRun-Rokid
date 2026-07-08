@@ -511,7 +511,7 @@ export default {
 
 <page>
   <view class="coach-wrap">
-  <card class="coach">
+  <card class="coach" role="group">
     <view class="coach-top">
       <view class="coach-mark">
         <image class="coach-logo" src="../../assets/smartrun-runner-48.png" mode="aspectFit" />
@@ -524,9 +524,9 @@ export default {
       <text class="bubble-text">{{ status === 'listening' ? (liveTranscript || '正在聆听') : reply }}</text>
     </view>
 
-    <view class="coach-bottom">
+    <view class="coach-bottom" role="navigation">
       <text class="coach-context">配速 心率 节奏</text>
-      <button class="btn-mic btn-selected" bindtap="toggleAsr">
+      <button class="btn-mic btn-selected" bindtap="toggleAsr" tabindex="0">
         <text class="btn-mic-txt">{{ status === 'listening' ? '停止' : '开始问' }}</text>
       </button>
     </view>
@@ -640,6 +640,7 @@ export default {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  padding: 0;
   width: 120px;
   height: 34px;
   background-color: #000000;

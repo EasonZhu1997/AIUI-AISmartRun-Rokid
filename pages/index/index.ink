@@ -250,7 +250,7 @@ export default {
 
 <page>
   <view class="home-wrap">
-    <card class="home-card">
+    <card class="home-card" role="group">
       <view class="home-top">
         <view class="brand-row">
           <image class="runner-logo" src="../../assets/smartrun-runner-48.png" mode="aspectFit" />
@@ -282,16 +282,16 @@ export default {
         </view>
       </view>
 
-      <view class="actions">
+      <view class="actions" role="navigation">
         <view class="action-slot">
-          <view class="{{ deviceClass }}" bindtap="openBluetooth">
+          <button class="{{ deviceClass }}" bindtap="openBluetooth" tabindex="0">
             <text class="action-text">设备</text>
-          </view>
+          </button>
         </view>
         <view class="action-slot action-slot-last">
-          <view class="{{ primaryClass }}" bindtap="openRun">
+          <button class="{{ primaryClass }}" bindtap="openRun" tabindex="1">
             <text class="action-text">开跑</text>
-          </view>
+          </button>
         </view>
       </view>
     </card>
@@ -471,6 +471,7 @@ export default {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
+  padding: 0;
   width: 100%;
   height: 38px;
   border: 2px solid var(--color-primary-60, rgba(64, 255, 94, 0.6));

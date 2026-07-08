@@ -554,7 +554,7 @@ export default {
 
 <page>
   <view class="hud-wrap">
-  <card class="hud">
+  <card class="hud" role="group">
     <view class="hud-top">
       <image class="runner-logo" src="../../assets/smartrun-runner-48.png" mode="aspectFit" />
       <text class="{{ modeChipClass }}">{{ modeLabel }}</text>

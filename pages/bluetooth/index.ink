@@ -377,7 +377,7 @@ export default {
 
 <page>
   <view class="device-wrap">
-    <card class="device-card">
+    <card class="device-card" role="group">
       <view class="device-top">
         <view class="title-row">
           <image class="runner-logo" src="../../assets/smartrun-runner-48.png" mode="aspectFit" />
@@ -386,32 +386,34 @@ export default {
         <text class="status-chip">{{ statusText }}</text>
       </view>
 
-      <view class="{{ rowSavedClass }}" bindtap="selectPreferredDevice">
-        <text class="setting-name">首选心率</text>
-        <text class="setting-value">{{ savedLabel }}</text>
-      </view>
-      <view class="{{ rowScanClass }}" bindtap="toggleScan">
-        <text class="setting-name">搜索设备</text>
-        <text class="setting-value">{{ scanLabel }}</text>
-      </view>
-      <view class="{{ rowAutoClass }}" bindtap="toggleAutoHeart">
-        <text class="setting-name">自动心率</text>
-        <text class="setting-value">{{ autoLabel }}</text>
-      </view>
-      <view class="{{ rowForgetClass }}" bindtap="forgetDevice">
-        <text class="setting-name">忘记设备</text>
-        <text class="setting-value">{{ forgetLabel }}</text>
+      <view class="device-list" role="navigation">
+        <button class="{{ rowSavedClass }}" bindtap="selectPreferredDevice" tabindex="0">
+          <text class="setting-name">首选心率</text>
+          <text class="setting-value">{{ savedLabel }}</text>
+        </button>
+        <button class="{{ rowScanClass }}" bindtap="toggleScan" tabindex="1">
+          <text class="setting-name">搜索设备</text>
+          <text class="setting-value">{{ scanLabel }}</text>
+        </button>
+        <button class="{{ rowAutoClass }}" bindtap="toggleAutoHeart" tabindex="2">
+          <text class="setting-name">自动心率</text>
+          <text class="setting-value">{{ autoLabel }}</text>
+        </button>
+        <button class="{{ rowForgetClass }}" bindtap="forgetDevice" tabindex="3">
+          <text class="setting-name">忘记设备</text>
+          <text class="setting-value">{{ forgetLabel }}</text>
+        </button>
       </view>
 
       <view class="device-footer">
         <text class="footer-note">{{ deviceNote }}</text>
-        <view class="actions">
-          <view class="footer-action" bindtap="openSettings">
+        <view class="actions" role="navigation">
+          <button class="footer-action" bindtap="openSettings" tabindex="4">
             <text class="action-text">设置</text>
-          </view>
-          <view class="footer-action action-primary" bindtap="openRun">
+          </button>
+          <button class="footer-action action-primary" bindtap="openRun" tabindex="5">
             <text class="action-text">开跑</text>
-          </view>
+          </button>
         </view>
       </view>
     </card>
@@ -468,6 +470,11 @@ export default {
   font-family: monospace;
 }
 
+.device-list {
+  display: flex;
+  flex-direction: column;
+}
+
 .status-chip {
   height: 24px;
   padding: 0 9px;
@@ -486,9 +493,9 @@ export default {
   align-items: center;
   justify-content: space-between;
   box-sizing: border-box;
+  padding: 0 12px;
   height: 43px;
   margin-bottom: 5px;
-  padding: 0 12px;
   border: 2px solid var(--color-primary-40, rgba(64, 255, 94, 0.4));
   border-radius: 12px;
   background-color: #000000;
@@ -544,6 +551,8 @@ export default {
   flex-direction: row;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
   width: 86px;
   height: 32px;
   border: 2px solid var(--color-primary-60, rgba(64, 255, 94, 0.6));
