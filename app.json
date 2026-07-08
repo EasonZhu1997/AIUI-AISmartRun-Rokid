@@ -2,9 +2,11 @@
   "pages": [
     "pages/index/index",
     "pages/run_hud/index",
+    "pages/bluetooth/index",
+    "pages/settings/index",
     "pages/coach/index"
   ],
   "window": {
-    "navigationBarTitleText": "SmartRun"
+    "navigationBarTitleText": "AISmartRun"
   }
 }

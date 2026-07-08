@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeSnapshot, writeLiveSnapshot, readLiveSnapshot, clearLiveSnapshot,
-  LIVE_SNAPSHOT_KEY,
+  LIVE_SNAPSHOT_KEY, LIVE_SNAPSHOT_TTL_MS,
 } from '../lib/live.js';
 
 // 假 wx storage:同步 get/set/remove,可注入。
@@ -52,6 +52,22 @@ test('clearLiveSnapshot 清除;读空 storage → null', () => {
   writeLiveSnapshot(st, { distanceM: 500 });
   clearLiveSnapshot(st);
   assert.equal(readLiveSnapshot(st), null);
+});
+
+test('快照 TTL:10s 内可读,过期/无 ts 的旧格式 → null(教练不拿旧数据当此刻)', () => {
+  const st = fakeStorage();
+  const t0 = 1000000;
+  writeLiveSnapshot(st, { bpm: 150, elapsedMs: 60000 }, t0);
+  // TTL 内:可读
+  assert.deepEqual(
+    readLiveSnapshot(st, t0 + LIVE_SNAPSHOT_TTL_MS),
+    { bpm: 150, elapsedMs: 60000, paused: false },
+  );
+  // 刚过期:null(HUD 停止刷新、异常退出残留都会走到这)
+  assert.equal(readLiveSnapshot(st, t0 + LIVE_SNAPSHOT_TTL_MS + 1), null);
+  // 旧格式(无 ts)一律视为过期
+  st.setStorageSync(LIVE_SNAPSHOT_KEY, { bpm: 150, elapsedMs: 60000, paused: false });
+  assert.equal(readLiveSnapshot(st, t0), null);
 });
 
 test('storage 抛异常 / 缺失 → 静默 null,不崩', () => {

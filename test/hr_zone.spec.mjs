@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { hrZone } from '../lib/hr.js';
 
 test('五区边界（maxHr=190）：50/60/70/80/90% 分界', () => {
-  assert.equal(hrZone(94, 190), 1);   // <50% 也归 Z1
+  assert.equal(hrZone(94, 190), 0);   // <50%(静息段)不点灯,保住 Z1=开始热身的语义
   assert.equal(hrZone(95, 190), 1);   // 50%
   assert.equal(hrZone(113, 190), 1);  // 59.5%
   assert.equal(hrZone(114, 190), 2);  // 60%

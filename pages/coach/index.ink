@@ -1,14 +1,15 @@
 <script type="application/json" def>
 {
-  "navigationBarTitleText": "AI 跑步教练",
-  "description": "语音 AI 跑步教练：唤醒或点按开始拾音，教练结合实时心率/配速给出简短语音指导，LLM 不可用时用规则化兜底回答。",
+  "navigationBarTitleText": "AISmartRun 教练",
+  "description": "中文：跑步时可以向 AI 教练询问配速、心率和节奏。它会优先参考当前跑步数据，给出简短语音建议；网络或模型不可用时，也会用本地规则给出基础提醒。\n\nEnglish: During a run, ask the AI coach about pace, heart rate and rhythm. It uses current run data first and gives short voice guidance; if the network or model is unavailable, it falls back to basic local tips.",
   "schema": {
     "data": {
       "type": "object",
       "properties": {
-        "status": { "type": "string", "description": "语音回合状态：idle/listening/thinking/speaking/error" },
-        "reply": { "type": "string", "description": "教练最近一句回答文本" }
-      }
+        "status": { "type": "string", "description": "中文：当前语音状态。 English: Current voice interaction status." },
+        "reply": { "type": "string", "description": "中文：教练最近一次回复。 English: Latest coach reply." }
+      },
+      "required": ["status", "reply"]
     }
   }
 }
@@ -16,26 +17,36 @@
 
 <script setup>
 import wx from 'wx';
-import { buildCoachSystemPrompt, fallbackCoachReply, summarizeSnapshot } from '../../lib/coach.js';
+import {
+  buildCoachPersonaPrompt, fallbackCoachReply, sanitizeCoachReply, summarizeSnapshot,
+} from '../../lib/coach.js';
 import {
   buildAnonLoginRequest, parseAnonLoginResponse,
+  buildAiuiRecordRequest, parseAiuiRecordResponse,
   buildMemoryContextRequest, parseMemoryContext, buildAugmentedQuestion,
+  resolveCoachBackendConfig,
 } from '../../lib/coach_api.js';
 import { readLiveSnapshot } from '../../lib/live.js';
+import { readRunSettings } from '../../lib/settings.js';
 
 const STREAM_POLL_MS = 16;
 const ASR_IDLE_TIMEOUT_MS = 5000;
 const SPEECH_LANG = 'zh-CN';
 const COACH_TOKEN_KEY = 'coach_token';           // wx storage 里的鉴权 JWT
 const DEVICE_ID_KEY = 'smartrun_device_id';       // 匿名设备 ID(通用链路)
-const BACKEND_TIMEOUT_MS = 6000;                  // 后端超时 → 降级到内置 LLM
-// AIUI 通用链路 App 共享密钥。⚠️ 仓库转私有后再填真值;占位时匿名直登失败 → 优雅降级到内置 LLM。
-const APP_KEY = '__SET_AFTER_REPO_PRIVATE__';
+const BACKEND_TIMEOUT_MS = 2500;                  // EverMind 后台超时:登录+记忆最坏 5s,不拖垮"思考"
+const LOGIN_RETRY_MS = 60000;                     // 匿名直登失败负缓存:60s 内不重试,失败不重复付超时
+const LLM_TIMEOUT_MS = 10000;                     // 官方模型流式总超时:挂起也要落到规则兜底,不许永久"思考"
 
 // 教练读 run_hud 通过 wx storage 写下的"此刻真实快照"(lib/live.js)。
 // 没在跑步 → 读到 null → summarizeSnapshot 给「暂无运动数据」、兜底也不编数字。
 function liveSnapshot() {
   return readLiveSnapshot(wx) || {};
+}
+
+function compactStatLine(snapshot) {
+  const s = summarizeSnapshot(snapshot);
+  return s.length > 24 ? s.slice(0, 24) + '...' : s;
 }
 
 function normalizeText(v) {
@@ -70,7 +81,7 @@ export default {
     statLine: '',
     liveTranscript: '',
     question: '',
-    reply: '点按钮，问配速或心率。',
+    reply: '点开始问：配速、心率、节奏。',
     usedFallback: false,
     replySource: '',
     lastError: '',
@@ -83,7 +94,9 @@ export default {
     this.turnId = '';
     this.finalTranscript = '';
     this.recognitionFailed = false;
-    this.setData({ statLine: summarizeSnapshot(liveSnapshot()) });
+    this.runSettings = readRunSettings(wx);
+    this.backendConfig = resolveCoachBackendConfig(wx);
+    this.setData({ statLine: compactStatLine(liveSnapshot()) });
     await this.refreshAvailability();
   },
 
@@ -100,6 +113,44 @@ export default {
 
   onVoiceWakeup(event) {
     this.beginTurn(event && event.keyword ? event.keyword : 'wake');
+  },
+
+  onKeyUp(event) {
+    const code = event && event.code;
+    if (code === 'Backspace') {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+      if (this.turnId || this.data.status === 'listening'
+          || this.data.status === 'thinking' || this.data.status === 'speaking') {
+        this.cancelTurn();
+        return;
+      }
+      this.goBack();
+      return;
+    }
+    if (code !== 'Enter' && code !== 'NumpadEnter' && code !== 'Space' && code !== 'GlobalHook') {
+      return;
+    }
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    this.toggleAsr();
+  },
+
+  goBack() {
+    if (typeof wx.navigateBack === 'function') {
+      wx.navigateBack({ delta: 1 });
+      return;
+    }
+    if (typeof wx.redirectTo === 'function') wx.redirectTo({ url: '/pages/index/index' });
+  },
+
+  cancelTurn() {
+    this.recognitionFailed = true;
+    this.turnId = '';
+    this.clearIdleTimer();
+    try {
+      if (this.recognition && typeof this.recognition.abort === 'function') this.recognition.abort();
+      else if (this.recognition && typeof this.recognition.stop === 'function') this.recognition.stop();
+    } catch (_e) {}
+    this.setData({ status: 'idle', liveTranscript: '', reply: '已取消。' });
   },
 
   detectAsr() { return typeof SpeechRecognition !== 'undefined'; },
@@ -125,8 +176,11 @@ export default {
 
   async ensureSession() {
     if (this.session) return this.session;
+    // 不指定模型名,交给 Rokid AIUI 宿主 defaultModel 配置(官方 DeepSeek 能力)。
+    // system prompt 只含人设:会话跨轮复用,实时快照每轮由 buildAugmentedQuestion
+    // 注入问题,避免会话创建瞬间的快照被"冻结"成全程事实。
     this.session = await LanguageModel.create({
-      initialPrompts: [{ role: 'system', content: buildCoachSystemPrompt(liveSnapshot()) }],
+      initialPrompts: [{ role: 'system', content: buildCoachPersonaPrompt() }],
     });
     return this.session;
   },
@@ -236,9 +290,12 @@ export default {
     }
   },
 
-  async readAll(stream) {
+  // 流式读全量,带截止时间:超时/取消(turnId 变化)即停,防止挂起流把用户永久卡在"思考"。
+  async readAll(stream, turnId, deadlineMs) {
     const chunks = [];
     while (true) {
+      if (this.turnId !== turnId) break;
+      if (deadlineMs && Date.now() > deadlineMs) throw new Error('llm timeout');
       const { done, value } = await stream.read();
       if (done) break;
       if (typeof value === 'string' && value.length > 0) {
@@ -268,34 +325,78 @@ export default {
   },
 
   // 稳定的匿名设备 ID(通用链路):首启生成一次,存 wx storage 长期不变。
+  // 页面级缓存兜底:storage 损坏时同一页面生命周期内仍复用同一个 ID,
+  // 不会每轮问答都在后端注册一个新匿名用户。
   ensureDeviceId() {
+    if (this.deviceIdCache) return this.deviceIdCache;
     let id = '';
     try { id = wx.getStorageSync(DEVICE_ID_KEY) || ''; } catch (_e) {}
     if (!id) {
       id = 'aiui-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
       try { wx.setStorageSync(DEVICE_ID_KEY, id); } catch (_e) {}
     }
+    this.deviceIdCache = id;
     return id;
   },
 
   // 取鉴权 token:优先已存的(你的个人 token 或上次匿名直登的);没有则用设备 ID 匿名直登换一个。
+  // 直登失败进入 60s 负缓存:断网时不为每轮问答重复支付一次登录超时。
+  // 后端 anon-login 强制要求共享 app key(缺失 422/不匹配 401):无 key 直接跳过登录,
+  // 不打必失败的请求 —— 记忆链路显式关闭,教练仍走官方模型 + 规则兜底。
   async ensureToken() {
     let token = '';
     try { token = wx.getStorageSync(COACH_TOKEN_KEY) || ''; } catch (_e) {}
     if (token) return token;
+    if (this.loginFailedAt && Date.now() - this.loginFailedAt < LOGIN_RETRY_MS) return '';
+    const config = this.backendConfig || resolveCoachBackendConfig(wx);
+    if (!config.appKey) return '';
     const resp = await this.wxRequest(
-      buildAnonLoginRequest({ appKey: APP_KEY, deviceId: this.ensureDeviceId() }),
+      buildAnonLoginRequest({
+        baseUrl: config.baseUrl,
+        clientId: config.clientId,
+        appKey: config.appKey,
+        deviceId: this.ensureDeviceId(),
+      }),
     );
     const t = parseAnonLoginResponse(resp);
-    if (t) { try { wx.setStorageSync(COACH_TOKEN_KEY, t); } catch (_e) {} }
+    if (t) {
+      this.loginFailedAt = null;
+      try { wx.setStorageSync(COACH_TOKEN_KEY, t); } catch (_e) {}
+    } else {
+      this.loginFailedAt = Date.now();
+    }
     return t || '';
   },
 
-  // 记忆检索(省 token:只从后端取记忆,不让后端跑 LLM);无 token 自动匿名直登;失败 → null,不影响主流程。
+  // AIUI 官方 LanguageModel 已生成的结果写回后端,由后端存历史并双写 EverMind。
+  async recordCoachTurn(question, reply, snapshot, source) {
+    if (this.runSettings && this.runSettings.memoryContext === false) return false;
+    try {
+      const token = await this.ensureToken();
+      if (!token) return false;
+      const config = this.backendConfig || resolveCoachBackendConfig(wx);
+      const resp = await this.wxRequest(buildAiuiRecordRequest({
+        baseUrl: config.baseUrl, token, question, reply, snapshot, source,
+      }));
+      if (resp && resp.statusCode === 401) {
+        try { wx.removeStorageSync(COACH_TOKEN_KEY); } catch (_e) {}
+        return false;
+      }
+      return parseAiuiRecordResponse(resp);
+    } catch (_e) {
+      return false;
+    }
+  },
+
+  // 记忆检索:只从后端取 EverMind/本地记忆,不让后端跑 LLM;注入官方 AIUI 模型 prompt。
   async fetchMemoryContext(question) {
+    if (this.runSettings && this.runSettings.memoryContext === false) return null;
     const token = await this.ensureToken();
     if (!token) return null;
-    const resp = await this.wxRequest(buildMemoryContextRequest({ token, query: question }));
+    const config = this.backendConfig || resolveCoachBackendConfig(wx);
+    const resp = await this.wxRequest(buildMemoryContextRequest({
+      baseUrl: config.baseUrl, token, query: question,
+    }));
     if (resp && resp.statusCode === 401) {
       try { wx.removeStorageSync(COACH_TOKEN_KEY); } catch (_e) {}  // token 过期 → 清掉,下次重新直登
       return null;
@@ -305,32 +406,47 @@ export default {
 
   async answer(turnId, question) {
     if (!turnId || this.turnId !== turnId) return;
-    this.setData({ status: 'thinking', reply: '', usedFallback: false, replySource: '' });
-
     const snap = liveSnapshot();
+    this.setData({
+      status: 'thinking', reply: '', usedFallback: false, replySource: '',
+      statLine: compactStatLine(snap),   // 顶部实时行每轮刷新,不再停留在进页那一刻
+    });
+
     let finalText = '';
     let replySource = '';
-
-    // 记忆增强(best-effort,不阻塞):后端取 EverMind/本地记忆;取不到就 null,不影响主流程。
-    let memCtx = null;
-    try { memCtx = await this.fetchMemoryContext(question); } catch (_e) { memCtx = null; }
-    if (this.turnId !== turnId) return;
-
-    // Tier 1(主力)：眼镜内置 DeepSeek V4 Pro,prompt 注入记忆+实时数据 —— 省你的 token、兼容性好
-    try {
-      if (!this.data.llmAvailable) throw new Error('LLM unavailable');
-      const session = await this.ensureSession();
-      const stream = session.promptStreaming(buildAugmentedQuestion(question, snap, memCtx));
-      finalText = normalizeText(await this.readAll(stream));
-      if (finalText) {
-        replySource = (memCtx && (memCtx.memories.length || memCtx.profile)) ? 'device+memory' : 'device';
-      } else {
-        throw new Error('empty reply');
-      }
-    } catch (_e) { finalText = ''; }
-
-    // Tier 2：规则兜底(内置模型不可用/离线也绝不把用户晾在"出错了")
     let usedFallback = false;
+    const zone = Number.isFinite(snap.zone) ? snap.zone : 0;
+
+    // 安全优先:Z5 高心率时直接用确定性规则回答(降速提醒),不把安全提示
+    // 交给概率性的 LLM;prompt 约束只是请求,规则才是保证。
+    if (zone >= 5) {
+      finalText = fallbackCoachReply(snap, question);
+      usedFallback = true;
+      replySource = 'rule-safety';
+    } else {
+      // 记忆增强(best-effort):后端只取 EverMind/本地记忆,官方 AIUI 模型负责生成回答。
+      let memCtx = null;
+      try { memCtx = await this.fetchMemoryContext(question); } catch (_e) { memCtx = null; }
+      if (this.turnId !== turnId) return;
+
+      // Tier 1(主链路):Rokid 官方 AIUI LanguageModel(DeepSeek)。
+      // 不再用 onLoad 时的一次性 llmAvailable 快照做闸门:能力可能恢复,
+      // 直接尝试创建/提问,失败自然落到规则兜底。流式带 10s 总超时。
+      try {
+        const session = await this.ensureSession();
+        const stream = session.promptStreaming(buildAugmentedQuestion(question, snap, memCtx));
+        const raw = await this.readAll(stream, turnId, Date.now() + LLM_TIMEOUT_MS);
+        // 后置消毒:prompt 里的"≤15字/无列表/无 markdown"只是请求,这里确定性保证。
+        finalText = sanitizeCoachReply(normalizeText(raw));
+        if (finalText) {
+          replySource = (memCtx && (memCtx.memories.length || memCtx.profile)) ? 'aiui+evermind' : 'aiui';
+        } else {
+          throw new Error('empty reply');
+        }
+      } catch (_e) { finalText = ''; }
+    }
+
+    // Tier 2:规则兜底(官方 AIUI 模型不可用时也绝不把用户晾在"出错了")。
     if (!finalText) {
       finalText = fallbackCoachReply(snap, question);
       usedFallback = true;
@@ -339,11 +455,13 @@ export default {
 
     if (this.turnId !== turnId) return;
     this.setData({ reply: finalText, usedFallback, replySource });
+    this.recordCoachTurn(question, finalText, snap, replySource);
     await this.speak(turnId, finalText);
   },
 
   async speak(turnId, text) {
     const content = normalizeText(text);
+    if (this.runSettings && this.runSettings.voiceCue === false) { this.finishTurn(turnId); return; }
     if (!content || !this.data.ttsAvailable) { this.finishTurn(turnId); return; }
     try {
       await this.playTts(content);
@@ -354,6 +472,15 @@ export default {
   },
 
   playTts(text) {
+    if (wx && wx.speech && typeof wx.speech.playTTS === 'function') {
+      this.setData({ status: 'speaking' });
+      try {
+        wx.speech.playTTS(text);
+        return Promise.resolve('done');
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    }
     if (typeof speechSynthesis !== 'undefined' &&
         typeof SpeechSynthesisUtterance !== 'undefined' &&
         typeof speechSynthesis.speak === 'function') {
@@ -368,12 +495,6 @@ export default {
         } catch (e) { reject(e); }
       });
     }
-    if (wx && wx.speech && typeof wx.speech.playTTS === 'function') {
-      this.setData({ status: 'speaking' });
-      return new Promise((resolve, reject) => {
-        wx.speech.playTTS({ text, success: () => resolve('done'), fail: reject });
-      });
-    }
     return Promise.resolve('unsupported');
   },
 
@@ -383,170 +504,158 @@ export default {
     this.turnId = '';
     this.finalTranscript = '';
     this.recognitionFailed = false;
-    this.setData({ status: 'idle', liveTranscript: '' });
+    this.setData({ status: 'idle', liveTranscript: '', statLine: compactStatLine(liveSnapshot()) });
   },
 };
 </script>
 
 <page>
-  <view class="coach">
-    <view class="avatar-row">
-      <image class="avatar" src="./coach-avatar.png" mode="aspectFill" />
-      <view class="avatar-meta">
-        <text class="avatar-name">SmartRun 教练</text>
-        <text class="avatar-src" ink:if="{{ replySource === 'device+memory' }}">V4·带记忆</text>
-        <text class="avatar-src" ink:if="{{ replySource === 'device' }}">DeepSeek V4</text>
-        <text class="avatar-src" ink:if="{{ replySource === 'rule' }}">离线兜底</text>
+  <view class="coach-wrap">
+  <card class="coach">
+    <view class="coach-top">
+      <view class="coach-mark">
+        <image class="coach-logo" src="../../assets/smartrun-runner-48.png" mode="aspectFit" />
       </view>
+      <text class="coach-title">教练</text>
+      <text class="coach-status">{{ status === 'listening' ? '聆听' : (status === 'thinking' ? '思考' : '待命') }}</text>
     </view>
 
-    <view class="stat-row">
-      <text class="stat-dot">●</text>
-      <text class="stat-text">{{ statLine }}</text>
+    <view class="chat-bubble">
+      <text class="bubble-text">{{ status === 'listening' ? (liveTranscript || '正在聆听') : reply }}</text>
     </view>
 
-    <view class="reply-box">
-      <text class="reply-text">{{ reply }}</text>
-      <text class="fallback-tag" ink:if="{{ usedFallback }}">规则兜底（LLM 离线）</text>
+    <view class="coach-bottom">
+      <text class="coach-context">配速 心率 节奏</text>
+      <button class="btn-mic btn-selected" bindtap="toggleAsr">
+        <text class="btn-mic-txt">{{ status === 'listening' ? '停止' : '开始问' }}</text>
+      </button>
     </view>
-
-    <view class="live" ink:if="{{ status === 'listening' }}">
-      <text class="live-text">{{ liveTranscript || '正在聆听…' }}</text>
-    </view>
-
-    <view class="foot">
-      <text class="status-chip status-{{ status }}">{{ status }}</text>
-      <view class="btn-mic" bindtap="toggleAsr">
-        <text class="btn-mic-txt">{{ status === 'listening' ? '停止' : '问教练' }}</text>
-      </view>
-    </view>
+  </card>
   </view>
 </page>
 
 <style>
-.avatar-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 20px;
-  border: 1px solid #24452f;
-  margin-right: 10px;
-}
-
-.avatar-meta {
+.coach-wrap {
   display: flex;
   flex-direction: column;
-}
-
-.avatar-name {
-  color: var(--color-primary, #40ff5e);
-  font-size: 15px;
-  line-height: 19px;
-  font-weight: bold;
-}
-
-.avatar-src {
-  color: #73a785;
-  font-size: 10px;
-  line-height: 14px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 150px;
 }
 
 .coach {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 150px;
   background-color: #000000;
-  border: 2px solid #143a20;
-  border-radius: var(--radius-md, 12px);
-  padding: 14px;
+  border: 2px solid var(--color-primary-60, rgba(64, 255, 94, 0.6));
+  border-radius: 12px;
+  padding: 10px 12px;
 }
 
-.stat-row {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-}
-
-.stat-dot {
-  color: var(--color-primary, #40ff5e);
-  font-size: 10px;
-}
-
-.stat-text {
-  color: #8fe0a0;
-  font-size: 12px;
-  line-height: 16px;
-}
-
-.reply-box {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-height: 56px;
-  padding: 10px;
-  border: 1px solid #1c3424;
-  border-radius: var(--radius-md, 12px);
-}
-
-.reply-text {
-  color: var(--color-primary, #40ff5e);
-  font-size: 18px;
-  line-height: 26px;
-}
-
-.fallback-tag {
-  color: #73a785;
-  font-size: 10px;
-  line-height: 14px;
-}
-
-.live {
-  display: flex;
-  flex-direction: row;
-}
-
-.live-text {
-  color: #dbffe5;
-  font-size: 13px;
-  line-height: 18px;
-}
-
-.foot {
+.coach-top {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
+  height: 30px;
 }
 
-.status-chip {
-  font-size: 11px;
-  color: #73a785;
+.coach-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--color-primary-60, rgba(64, 255, 94, 0.6));
+  border-radius: 15px;
+  background-color: var(--color-primary-08, rgba(64, 255, 94, 0.08));
 }
 
-.status-listening,
-.status-thinking,
-.status-speaking {
+.coach-logo {
+  width: 26px;
+  height: 26px;
+}
+
+.coach-title {
   color: var(--color-primary, #40ff5e);
+  font-size: 26px;
+  line-height: 30px;
+  font-weight: bold;
+  font-family: monospace;
+  margin-left: 8px;
+}
+
+.coach-status {
+  color: var(--color-primary, #40ff5e);
+  font-size: 18px;
+  line-height: 22px;
+  font-weight: bold;
+  padding: 0 9px;
+  border: 2px solid var(--color-primary-60, rgba(64, 255, 94, 0.6));
+  border-radius: 12px;
+  background-color: var(--color-primary-08, rgba(64, 255, 94, 0.08));
+}
+
+.chat-bubble {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 64px;
+  margin-top: 6px;
+  padding: 8px 12px;
+  background-color: var(--color-primary-08, rgba(64, 255, 94, 0.08));
+  border: 4px solid var(--color-primary, #40ff5e);
+  border-radius: 12px;
+}
+
+.bubble-text {
+  color: var(--color-primary, #40ff5e);
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: bold;
+}
+
+.coach-bottom {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: 30px;
+  margin-top: 6px;
+}
+
+.coach-context {
+  color: var(--color-primary-60, rgba(64, 255, 94, 0.6));
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: bold;
 }
 
 .btn-mic {
-  min-width: 110px;
-  padding: 8px 14px;
-  background-color: var(--color-primary, #40ff5e);
-  border-radius: var(--radius-md, 12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 120px;
+  height: 34px;
+  background-color: #000000;
+  border-radius: 12px;
+  border: 2px solid var(--color-primary, #40ff5e);
 }
 
 .btn-mic-txt {
-  color: #031106;
-  font-size: 15px;
-  line-height: 19px;
+  color: var(--color-primary, #40ff5e);
+  font-size: 24px;
+  line-height: 30px;
   font-weight: bold;
   text-align: center;
+}
+
+.btn-selected {
+  border-width: 4px;
 }
 </style>

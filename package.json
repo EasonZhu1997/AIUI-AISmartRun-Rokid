@@ -1,11 +1,27 @@
 {
-  "name": "SmartRun",
-  "version": "1.0.0",
-  "description": "A JSUI Agent project",
+  "name": "AISmartRun",
+  "version": "0.1.0",
+  "description": "中文：AISmartRun 是 Rokid 眼镜上的跑步助手。首页显示单眼镜就绪和心率就绪状态；点一下即可开始跑步，开跑后自动接入已记住的标准蓝牙心率设备，眼镜会显示时间、步频、估算距离和配速。跑步中也可以向 AI 教练提问，它会用简短语音给出节奏和安全提醒。首次使用需在设备页完成一次配对授权，之后开跑会自动接入已记住的设备。\n\nEnglish: AISmartRun is a running assistant for Rokid glasses. The home page shows glasses-ready and heart-rate readiness states; start a run with one tap and the run screen automatically connects the remembered standard Bluetooth heart-rate device, showing time, step rate, estimated distance and running pace. During a run, you can ask the AI coach for short voice guidance about rhythm and safety. First-time use requires one pairing authorization on the device page; after that, runs connect the remembered device automatically.",
   "main": "app.js",
-  "dependencies": {},
   "type": "module",
   "scripts": {
-    "test": "python scripts/run_tests_on_hermes.py"
+    "dev": "node tools/aiui_doctor.mjs",
+    "start": "npm run dev",
+    "test": "python3 scripts/run_tests_on_hermes.py",
+    "pack:aix": "node tools/pack_aix.mjs",
+    "pack:aix:en": "node tools/pack_aix_en.mjs",
+    "inspect:aix": "node tools/inspect_aix.mjs",
+    "inspect:aix:en": "node tools/inspect_aix.mjs release/AISmartRun-en.aix",
+    "build:local": "npm run pack:aix && npm run inspect:aix",
+    "build": "npm run build:local",
+    "build:en": "npm run pack:aix:en && npm run inspect:aix:en",
+    "doctor:aiui": "node tools/aiui_doctor.mjs",
+    "preview:check": "node tools/validate_previews.mjs",
+    "verify:release": "node tools/verify_release.mjs",
+    "scaffold:aiui": "node tools/scaffold_aiui.mjs"
+  },
+  "devDependencies": {
+    "@yodaos-pkg/aix": "^0.6.0",
+    "@yodaos-pkg/create-aiui-agent": "^2.1.2"
   }
 }

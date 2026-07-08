@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  summarizeSnapshot, buildCoachSystemPrompt, classifyIntent, fallbackCoachReply,
-  nextProactiveCue,
+  summarizeSnapshot, buildCoachSystemPrompt, buildCoachPersonaPrompt,
+  classifyIntent, fallbackCoachReply, nextProactiveCue, sanitizeCoachReply,
 } from '../lib/coach.js';
 
 const FULL = {
@@ -42,6 +42,7 @@ test('buildCoachSystemPrompt：含人设 + 实时数据 + 医疗免责', () => {
 test('classifyIntent：配速/心率/距离/时间/通用', () => {
   assert.equal(classifyIntent('我配速怎么样'), 'pace');
   assert.equal(classifyIntent('能再快点吗'), 'pace');
+  assert.equal(classifyIntent('我现在该加速吗'), 'pace');
   assert.equal(classifyIntent('心率高不高'), 'hr');
   assert.equal(classifyIntent('还有多远'), 'distance');
   assert.equal(classifyIntent('跑了多久了'), 'time');
@@ -62,9 +63,11 @@ test('fallbackCoachReply：配速问题引用真实配速', () => {
   );
 });
 
-test('fallbackCoachReply：心率问题——有数据报读，无数据引导连接', () => {
+test('fallbackCoachReply：心率问题——有数据报读，无数据不暗示必须连蓝牙', () => {
   assert.match(fallbackCoachReply(FULL, '心率多少'), /158/);
-  assert.match(fallbackCoachReply({ zone: 0 }, '心率呢'), /胸带|广播/);
+  const noHr = fallbackCoachReply({ zone: 0 }, '心率呢');
+  assert.match(noHr, /无心率数据/);
+  assert.doesNotMatch(noHr, /胸带|手表|广播|蓝牙/);
 });
 
 test('fallbackCoachReply：距离/时间问题', () => {
@@ -75,7 +78,9 @@ test('fallbackCoachReply：距离/时间问题', () => {
 test('fallbackCoachReply：通用问题按心率区间给鼓励，绝不返回空串', () => {
   assert.ok(fallbackCoachReply({ zone: 4 }, '加油').length > 0);
   assert.match(fallbackCoachReply({ zone: 1 }, '嗯'), /轻松|提速|稳/);
-  assert.ok(fallbackCoachReply({}, '').length > 0);
+  assert.match(fallbackCoachReply({}, ''), /先稳跑/);
+  assert.match(fallbackCoachReply({ elapsedMs: 20000 }, '随便鼓励一句'), /先稳跑/);
+  assert.match(fallbackCoachReply({ cadenceSpm: 172 }, '随便鼓励一句'), /节奏很好/);
 });
 
 test('nextProactiveCue：进 Z5 安全降速优先，且盖过整公里里程碑', () => {
@@ -101,4 +106,40 @@ test('nextProactiveCue：刚进 Z4 → 提醒；无事件 → null', () => {
   assert.equal(nextProactiveCue({ zone: 3, distanceM: 1500, elapsedMs: 120000 },
                                 { zone: 3, distanceM: 1550, elapsedMs: 122000 }), null);
   assert.equal(nextProactiveCue(null, null), null);
+});
+
+test('nextProactiveCue：持续停留 Z5 → 每满 1 分钟重复安全提醒(边沿一次不够)', () => {
+  // 同一分钟内:不重复
+  assert.equal(nextProactiveCue({ zone: 5, elapsedMs: 610000, distanceM: 1500 },
+                                { zone: 5, elapsedMs: 615000, distanceM: 1520 }), null);
+  // 跨分钟边界:重复提醒,且盖过里程碑
+  const cue = nextProactiveCue({ zone: 5, elapsedMs: 659000, distanceM: 1990 },
+                               { zone: 5, elapsedMs: 661000, distanceM: 2010 });
+  assert.match(cue, /Z5/);
+  assert.ok(cue.length <= 15, `Z5 持续提醒需 ≤15 字: ${cue}`);
+});
+
+test('buildCoachPersonaPrompt：只含人设约束,不含实时数据(每轮注入,防冻结)', () => {
+  const p = buildCoachPersonaPrompt();
+  assert.match(p, /AI 跑步教练/);
+  assert.match(p, /不给医疗建议/);
+  assert.match(p, /15个汉字/);
+  assert.doesNotMatch(p, /当前实时数据/);
+});
+
+test('sanitizeCoachReply：LLM 输出后置消毒——markdown/换行/超长的确定性防线', () => {
+  // 正常短句原样通过
+  assert.equal(sanitizeCoachReply('配速稳住，呼吸放松。'), '配速稳住，呼吸放松。');
+  // markdown 标记与换行清掉
+  assert.equal(sanitizeCoachReply('**建议**：\n- 降速\n- 深呼吸'), '建议 ： 降速 深呼吸');
+  // 代码块整体丢弃
+  assert.doesNotMatch(sanitizeCoachReply('好的```const x=1```保持节奏。'), /const/);
+  // 超长截到句读,不整段上屏挤爆 64px 气泡
+  const long = '现在你的配速是每公里五分三十秒，心率一百五十八，建议你保持当前节奏并注意摆臂放松，落地轻一点，眼睛看前方。';
+  const cut = sanitizeCoachReply(long);
+  assert.ok(cut.length <= 42, `超长必须截断: ${cut.length}`);
+  assert.match(cut, /[。，,.!！]$/);
+  // 空/纯符号 → ''(调用方走规则兜底)
+  assert.equal(sanitizeCoachReply(''), '');
+  assert.equal(sanitizeCoachReply('###\n\n***'), '');
 });

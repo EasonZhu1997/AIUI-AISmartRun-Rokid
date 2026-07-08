@@ -55,3 +55,31 @@ test('心率/步频过滤非法值，快照字段齐全', () => {
   assert.equal(snap.elapsedMs, 60000);
   assert.equal(snap.paused, false);
 });
+
+test('全程累计：均值/峰值心率、均值步频(只计运动中样本)', () => {
+  const s = new RunSession(0);
+  s.onHeartRate(140);
+  s.onHeartRate(160);
+  s.onHeartRate(150);
+  s.onCadence(170);
+  s.onCadence(0);        // 静止样本不摊薄均值
+  s.onCadence(180);
+  assert.equal(s.avgBpm(), 150);
+  assert.equal(s.maxBpm(), 160);
+  assert.equal(s.avgCadenceSpm(), 175);
+  // 暂停中样本不计入累计(但仍更新瞬时值)
+  s.pause(10000);
+  s.onHeartRate(200);
+  s.onCadence(190);
+  assert.equal(s.avgBpm(), 150);
+  assert.equal(s.maxBpm(), 160);
+  assert.equal(s.avgCadenceSpm(), 175);
+  assert.equal(s.snapshot(11000).bpm, 200, '瞬时值照常更新');
+});
+
+test('全程累计：无样本时返回 null,不编数', () => {
+  const s = new RunSession(0);
+  assert.equal(s.avgBpm(), null);
+  assert.equal(s.maxBpm(), null);
+  assert.equal(s.avgCadenceSpm(), null);
+});

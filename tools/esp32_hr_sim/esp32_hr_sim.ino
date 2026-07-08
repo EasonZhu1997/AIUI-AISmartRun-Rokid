@@ -12,7 +12,7 @@
 //   0x180F Battery Service
 //     0x2A19 Battery Level           [Read+Notify] 88%，每分钟 -1 到 60 回卷
 //   0x180A Device Information
-//     0x2A29 Manufacturer            [Read]    "SmartRun Sim"
+//     0x2A29 Manufacturer            [Read]    "AISmartRun Sim"
 //
 // 依赖：NimBLE-Arduino（arduino-cli lib install "NimBLE-Arduino"）
 // 板型：esp32:esp32:esp32s3（USB CDC on boot 打开，串口走 USB-C）
@@ -92,7 +92,7 @@ void setup() {
   NimBLEService* dis = server->createService(NimBLEUUID((uint16_t)0x180A));
   NimBLECharacteristic* manufacturer = dis->createCharacteristic(
       NimBLEUUID((uint16_t)0x2A29), NIMBLE_PROPERTY::READ);
-  manufacturer->setValue("SmartRun Sim");
+  manufacturer->setValue("AISmartRun Sim");
   dis->start();
 
   // --- 广播：把 0x180D 放进广播包，眼镜端 filters:[{services:['heart_rate']}] 才扫得到 ---

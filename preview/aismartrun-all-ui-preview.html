@@ -1,0 +1,769 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISmartRun All UI Preview</title>
+  <style>
+    :root {
+      --color-primary: #40ff5e;
+      --color-primary-60: rgba(64, 255, 94, 0.6);
+      --color-primary-40: rgba(64, 255, 94, 0.4);
+      --color-primary-08: rgba(64, 255, 94, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      background: #050705;
+      color: var(--color-primary);
+      font-family: Arial, "STHeiti", sans-serif;
+    }
+
+    .board {
+      width: 1000px;
+    }
+
+    .title {
+      margin: 0 0 18px;
+      color: var(--color-primary);
+      font-size: 28px;
+      line-height: 34px;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 480px 480px;
+      gap: 22px 28px;
+      align-items: start;
+    }
+
+    .panel-label {
+      margin: 0 0 7px;
+      color: var(--color-primary-60);
+      font-size: 17px;
+      line-height: 22px;
+      font-weight: 700;
+    }
+
+    .card-base {
+      width: 480px;
+      background-color: #000000;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand-row,
+    .title-row,
+    .coach-left {
+      display: flex;
+      align-items: center;
+    }
+
+    .runner-logo {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+    }
+
+    .logo-small {
+      width: 26px;
+      height: 26px;
+      margin-right: 0;
+    }
+
+    .chip {
+      height: 24px;
+      padding: 0 9px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      color: var(--color-primary);
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      background-color: var(--color-primary-08);
+    }
+
+    .home-card {
+      height: 228px;
+      padding: 10px 12px;
+    }
+
+    .brand {
+      color: var(--color-primary);
+      font-size: 28px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .home-top {
+      height: 30px;
+      margin-bottom: 8px;
+    }
+
+    .mode-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 42px;
+      margin-bottom: 8px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      background-color: var(--color-primary-08);
+    }
+
+    .mode-copy {
+      display: flex;
+      align-items: center;
+    }
+
+    .ready-main {
+      color: var(--color-primary);
+      font-size: 28px;
+      line-height: 34px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+      margin-right: 12px;
+    }
+
+    .ready-sub {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+
+    .device-panel {
+      display: flex;
+      flex-direction: column;
+      height: 74px;
+      margin-bottom: 8px;
+    }
+
+    .device-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 34px;
+      margin-bottom: 6px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+    }
+
+    .device-name,
+    .device-state {
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .device-state-muted {
+      color: var(--color-primary-60);
+    }
+
+    .wait-dots {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot-mini {
+      width: 8px;
+      height: 8px;
+      border-radius: 4px;
+      background-color: var(--color-primary-40);
+    }
+
+    .dot-mini-on {
+      background-color: var(--color-primary);
+    }
+
+    .settings-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--color-primary-40);
+    }
+
+    .footer-note {
+      color: var(--color-primary-60);
+      font-size: 20px;
+      line-height: 26px;
+      font-weight: 700;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .home-actions {
+      display: flex;
+      align-items: center;
+      height: 38px;
+    }
+
+    .home-action-slot {
+      display: flex;
+      width: 50%;
+      padding-right: 5px;
+    }
+
+    .home-action-slot-last {
+      padding-right: 0;
+      padding-left: 5px;
+    }
+
+    .home-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 38px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .home-action-primary {
+      border-width: 3px;
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-08);
+    }
+
+    .action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 86px;
+      height: 32px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .action-primary {
+      width: 96px;
+      border-width: 4px;
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-08);
+    }
+
+    .action-text {
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .run-card {
+      height: 150px;
+      padding: 7px 10px 6px;
+    }
+
+    .hud-top {
+      height: 26px;
+      margin-bottom: 4px;
+    }
+
+    .glasses-grid {
+      display: grid;
+      grid-template-columns: 112px 92px 96px 112px;
+      column-gap: 5px;
+      height: 76px;
+      align-items: center;
+    }
+
+    .unified-grid {
+      display: grid;
+      grid-template-columns: 16px 64px 82px 62px 72px 86px;
+      column-gap: 5px;
+      height: 76px;
+      align-items: center;
+    }
+
+    .run-metric {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 76px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+    }
+
+    .run-main,
+    .run-hero {
+      border-left: 3px solid var(--color-primary);
+      background-color: var(--color-primary-08);
+    }
+
+    .run-value {
+      color: var(--color-primary);
+      font-size: 28px;
+      line-height: 32px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+      text-align: center;
+    }
+
+    .run-value-big,
+    .run-value-hero {
+      font-size: 34px;
+      line-height: 36px;
+    }
+
+    .metric-label {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 20px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 76px;
+    }
+
+    .zone-dot {
+      width: 10px;
+      height: 6px;
+      margin-bottom: 5px;
+      border-radius: 3px;
+      background-color: var(--color-primary-40);
+    }
+
+    .zone-on {
+      background-color: var(--color-primary);
+    }
+
+    .passive-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 27px;
+      margin-top: 5px;
+      border-top: 1px solid var(--color-primary-40);
+    }
+
+    .coach-line {
+      color: var(--color-primary);
+      font-size: 20px;
+      line-height: 26px;
+      font-weight: 700;
+    }
+
+    .footer-source {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+
+    .coach-card {
+      height: 150px;
+      padding: 10px 12px;
+    }
+
+    .coach-top {
+      height: 30px;
+    }
+
+    .coach-mark {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 30px;
+      height: 30px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 15px;
+      background-color: var(--color-primary-08);
+    }
+
+    .coach-logo {
+      width: 26px;
+      height: 26px;
+    }
+
+    .coach-title {
+      margin-left: 8px;
+      color: var(--color-primary);
+      font-size: 26px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .single-bubble {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      height: 64px;
+      margin-top: 6px;
+      padding: 8px 12px;
+      background-color: var(--color-primary-08);
+      border: 4px solid var(--color-primary);
+      border-radius: 12px;
+    }
+
+    .bubble-text {
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .coach-bottom {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 30px;
+      margin-top: 6px;
+    }
+
+    .coach-context {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+
+    .ask-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 120px;
+      height: 34px;
+      border: 4px solid var(--color-primary);
+      border-radius: 12px;
+    }
+
+    .ask-text {
+      color: var(--color-primary);
+      font-size: 24px;
+      line-height: 30px;
+      font-weight: 700;
+    }
+
+    .settings-card {
+      height: 300px;
+      padding: 10px 12px;
+    }
+
+    .settings-top {
+      height: 32px;
+      margin-bottom: 8px;
+    }
+
+    .settings-title {
+      color: var(--color-primary);
+      font-size: 30px;
+      line-height: 32px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 43px;
+      margin-bottom: 5px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+    }
+
+    .row-active {
+      border-width: 4px;
+      background-color: var(--color-primary-08);
+    }
+
+    .setting-name {
+      color: var(--color-primary);
+      font-size: 24px;
+      line-height: 30px;
+      font-weight: 700;
+    }
+
+    .setting-value {
+      color: var(--color-primary);
+      font-size: 26px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .settings-footer {
+      height: 36px;
+      margin-top: 1px;
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <h1 class="title">AISmartRun UI 总览</h1>
+    <section class="grid">
+      <div>
+        <p class="panel-label">正式首页</p>
+        <div class="card-base home-card">
+          <div class="top-row home-top">
+            <div class="brand-row">
+              <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+              <span class="brand">AISmartRun</span>
+            </div>
+            <span class="chip">已记住</span>
+          </div>
+          <div class="mode-strip">
+            <div class="mode-copy">
+              <span class="ready-main">自由跑</span>
+              <span class="ready-sub">开跑自动连</span>
+            </div>
+            <div class="wait-dots">
+              <span class="dot-mini dot-mini-on"></span>
+              <span class="dot-mini"></span>
+              <span class="dot-mini"></span>
+            </div>
+          </div>
+          <div class="device-panel">
+            <div class="device-row">
+              <span class="device-name">单眼镜</span>
+              <span class="device-state">已就绪</span>
+            </div>
+            <div class="device-row">
+              <span class="device-name">心率</span>
+              <span class="device-state device-state-muted">已记住</span>
+            </div>
+          </div>
+          <div class="home-actions">
+            <div class="home-action-slot">
+              <div class="home-action"><span class="action-text">设备</span></div>
+            </div>
+            <div class="home-action-slot home-action-slot-last">
+              <div class="home-action home-action-primary"><span class="action-text">开跑</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">蓝牙设备页</p>
+        <div class="card-base settings-card">
+          <div class="top-row settings-top">
+            <div class="title-row">
+              <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+              <span class="settings-title">设备</span>
+            </div>
+            <span class="chip">已记住</span>
+          </div>
+          <div class="setting-row row-active">
+            <span class="setting-name">首选心率</span>
+            <span class="setting-value">Polar H10</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-name">搜索设备</span>
+            <span class="setting-value">扫描</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-name">自动心率</span>
+            <span class="setting-value">开</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-name">忘记设备</span>
+            <span class="setting-value">清除</span>
+          </div>
+          <div class="settings-footer">
+            <span class="footer-note">开跑自动连</span>
+            <div class="actions">
+              <div class="action"><span class="action-text">设置</span></div>
+              <div class="action action-primary"><span class="action-text">开跑</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">跑步 HUD / 单眼镜模式</p>
+        <div class="card-base run-card">
+          <div class="top-row hud-top">
+            <img class="logo-small" src="../assets/smartrun-runner-48.png" alt="" />
+            <span class="chip">单眼镜模式</span>
+          </div>
+          <div class="glasses-grid">
+            <div class="run-metric run-main">
+              <span class="run-value run-value-big">5:38</span>
+              <span class="metric-label">配速</span>
+            </div>
+            <div class="run-metric">
+              <span class="run-value run-value-big">168</span>
+              <span class="metric-label">步频</span>
+            </div>
+            <div class="run-metric">
+              <span class="run-value run-value-big">1.24</span>
+              <span class="metric-label">距离</span>
+            </div>
+            <div class="run-metric run-main">
+              <span class="run-value run-value-big">07:02</span>
+              <span class="metric-label">时长</span>
+            </div>
+          </div>
+          <div class="passive-footer">
+            <span class="coach-line">节奏很好，保持</span>
+            <span class="footer-source">眼镜估算</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">跑步 HUD / 心率接入</p>
+        <div class="card-base run-card">
+          <div class="top-row hud-top">
+            <img class="logo-small" src="../assets/smartrun-runner-48.png" alt="" />
+            <span class="chip">心率接入</span>
+          </div>
+          <div class="unified-grid">
+            <div class="zone">
+              <div class="zone-dot"></div>
+              <div class="zone-dot zone-on"></div>
+              <div class="zone-dot zone-on"></div>
+              <div class="zone-dot zone-on"></div>
+              <div class="zone-dot zone-on"></div>
+            </div>
+            <div class="run-metric run-hero">
+              <span class="run-value run-value-hero">152</span>
+              <span class="metric-label">心率</span>
+            </div>
+            <div class="run-metric">
+              <span class="run-value">5:42</span>
+              <span class="metric-label">配速</span>
+            </div>
+            <div class="run-metric">
+              <span class="run-value">170</span>
+              <span class="metric-label">步频</span>
+            </div>
+            <div class="run-metric">
+              <span class="run-value">2.36</span>
+              <span class="metric-label">距离</span>
+            </div>
+            <div class="run-metric">
+              <span class="run-value">13:28</span>
+              <span class="metric-label">时长</span>
+            </div>
+          </div>
+          <div class="passive-footer">
+            <span class="coach-line">呼吸放稳，配速别急</span>
+            <span class="footer-source">心率+眼镜</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">AI 语音教练</p>
+        <div class="card-base coach-card">
+          <div class="top-row coach-top">
+            <div class="coach-left">
+              <div class="coach-mark">
+                <img class="coach-logo" src="../assets/smartrun-runner-48.png" alt="" />
+              </div>
+              <span class="coach-title">教练</span>
+            </div>
+            <span class="chip">待命</span>
+          </div>
+          <div class="single-bubble">
+            <span class="bubble-text">当前配速稳定，肩膀放松。</span>
+          </div>
+          <div class="coach-bottom">
+            <span class="coach-context">配速 心率 节奏</span>
+            <div class="ask-action"><span class="ask-text">开始问</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">跑前设置</p>
+        <div class="card-base settings-card">
+          <div class="top-row settings-top">
+            <div class="title-row">
+              <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+              <span class="settings-title">设置</span>
+            </div>
+            <span class="chip">已保存</span>
+          </div>
+          <div class="setting-row row-active">
+            <span class="setting-name">步长</span>
+            <span class="setting-value">0.85m</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-name">自动心率</span>
+            <span class="setting-value">开</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-name">语音提示</span>
+            <span class="setting-value">开</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-name">记忆增强</span>
+            <span class="setting-value">开</span>
+          </div>
+          <div class="settings-footer">
+            <span class="footer-note">跑前设置</span>
+            <div class="action action-primary"><span class="action-text">开跑</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">页面触发流程</p>
+        <div class="card-base settings-card">
+          <div style="display: grid; grid-template-columns: 1fr; gap: 8px;">
+            <div class="setting-row row-active" style="height: 36px; margin-bottom: 0;">
+              <span class="setting-name">首页</span>
+              <span class="setting-value">就绪</span>
+            </div>
+            <div class="footer-note" style="height: 18px;">点设备</div>
+            <div class="setting-row" style="height: 36px; margin-bottom: 0;">
+              <span class="setting-name">设备</span>
+              <span class="setting-value">记首选</span>
+            </div>
+            <div class="footer-note" style="height: 18px;">开跑 / Enter / GlobalHook</div>
+            <div class="setting-row" style="height: 36px; margin-bottom: 0;">
+              <span class="setting-name">HUD</span>
+              <span class="setting-value">自动记录</span>
+            </div>
+            <div class="footer-note" style="height: 18px;">心率 notify 有效</div>
+            <div class="setting-row" style="height: 36px; margin-bottom: 0;">
+              <span class="setting-name">心率</span>
+              <span class="setting-value">同屏</span>
+            </div>
+            <div class="footer-note" style="height: 18px;">问教练 / 语音唤醒</div>
+            <div class="setting-row" style="height: 36px; margin-bottom: 0;">
+              <span class="setting-name">教练</span>
+              <span class="setting-value">短建议</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

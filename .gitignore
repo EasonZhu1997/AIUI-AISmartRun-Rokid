@@ -3,3 +3,8 @@ node_modules/
 .DS_Store
 tools/arduino-cli/
 _synchk.mjs
+test/.pages-build/
+.claude/.stop_hook_*
+**/.claude/.stop_hook_*
+.playwright-mcp/
+release/.*.tmp/

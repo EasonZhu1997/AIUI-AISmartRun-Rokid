@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISmartRun Waiting Home Preview</title>
+  <style>
+    :root {
+      --color-primary: #40ff5e;
+      --color-primary-60: rgba(64, 255, 94, 0.6);
+      --color-primary-40: rgba(64, 255, 94, 0.4);
+      --color-primary-08: rgba(64, 255, 94, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      background: #050705;
+      color: var(--color-primary);
+      font-family: Arial, "STHeiti", sans-serif;
+    }
+
+    .preview {
+      width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .preview-title {
+      margin: 0;
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .home-wrap {
+      display: flex;
+      flex-direction: column;
+      width: 480px;
+      height: 228px;
+    }
+
+    .home-card {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 228px;
+      padding: 10px 12px;
+      background-color: #000000;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .home-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 30px;
+      margin-bottom: 8px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .runner-logo {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+    }
+
+    .brand {
+      color: var(--color-primary);
+      font-size: 28px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .status-chip {
+      height: 24px;
+      padding: 0 9px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      color: var(--color-primary);
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      background-color: var(--color-primary-08);
+    }
+
+    .mode-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 42px;
+      margin-bottom: 8px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      background-color: var(--color-primary-08);
+    }
+
+    .mode-copy {
+      display: flex;
+      align-items: center;
+    }
+
+    .ready-main {
+      color: var(--color-primary);
+      font-size: 28px;
+      line-height: 34px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+      margin-right: 12px;
+    }
+
+    .ready-sub {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+
+    .device-panel {
+      display: flex;
+      flex-direction: column;
+      height: 74px;
+      margin-bottom: 8px;
+    }
+
+    .device-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 34px;
+      margin-bottom: 6px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      background-color: #000000;
+    }
+
+    .device-name {
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .device-state {
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .device-state-muted {
+      color: var(--color-primary-60);
+    }
+
+    .wait-dots {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 4px;
+      background-color: var(--color-primary-40);
+    }
+
+    .dot-on {
+      background-color: var(--color-primary);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      height: 38px;
+    }
+
+    .action-slot {
+      display: flex;
+      width: 50%;
+      padding-right: 5px;
+    }
+
+    .action-slot-last {
+      padding-right: 0;
+      padding-left: 5px;
+    }
+
+    .action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 38px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      background-color: #000000;
+    }
+
+    .action-primary {
+      border-width: 3px;
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-08);
+    }
+
+    .action-text {
+      color: var(--color-primary);
+      font-size: 24px;
+      line-height: 30px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <h1 class="preview-title">AISmartRun 首页预览</h1>
+    <section class="home-wrap">
+      <div class="home-card">
+        <div class="home-top">
+          <div class="brand-row">
+            <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+            <span class="brand">AISmartRun</span>
+          </div>
+          <span class="status-chip">已记住</span>
+        </div>
+
+        <div class="mode-strip">
+          <div class="mode-copy">
+            <span class="ready-main">自由跑</span>
+            <span class="ready-sub">开跑自动连</span>
+          </div>
+          <div class="wait-dots" aria-hidden="true">
+            <span class="dot dot-on"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+
+        <div class="device-panel">
+          <div class="device-row">
+            <span class="device-name">单眼镜</span>
+            <span class="device-state">已就绪</span>
+          </div>
+          <div class="device-row">
+            <span class="device-name">心率</span>
+            <span class="device-state device-state-muted">已记住</span>
+          </div>
+        </div>
+
+        <div class="actions">
+          <div class="action-slot">
+            <div class="action">
+              <span class="action-text">设备</span>
+            </div>
+          </div>
+          <div class="action-slot action-slot-last">
+            <div class="action action-primary">
+              <span class="action-text">开跑</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

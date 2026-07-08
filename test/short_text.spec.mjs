@@ -32,6 +32,7 @@ test('fallbackCoachReply：全意图 × 有/无数据 × 各区间，全部 ≤1
 test('nextProactiveCue：四类主动提示全部 ≤15 字', () => {
   const cues = [
     nextProactiveCue({ zone: 3 }, { zone: 5 }),                                         // Z5 安全
+    nextProactiveCue({ zone: 5, elapsedMs: 659000 }, { zone: 5, elapsedMs: 661000 }),   // Z5 持续每分钟
     nextProactiveCue({ distanceM: 990 }, { distanceM: 1010, paceSecPerKm: 330 }),       // 整公里+配速
     nextProactiveCue({ distanceM: 11990 }, { distanceM: 12010 }),                       // 整公里无配速(两位数)
     nextProactiveCue({ elapsedMs: 299000 }, { elapsedMs: 301000, cadenceSpm: 176 }),    // 5 分钟+步频

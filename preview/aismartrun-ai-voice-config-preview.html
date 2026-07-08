@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISmartRun AI Voice Config Preview</title>
+  <style>
+    :root {
+      --color-primary: #40ff5e;
+      --color-primary-60: rgba(64, 255, 94, 0.6);
+      --color-primary-40: rgba(64, 255, 94, 0.4);
+      --color-primary-08: rgba(64, 255, 94, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      background: #050705;
+      color: var(--color-primary);
+      font-family: Arial, "STHeiti", sans-serif;
+    }
+
+    .board {
+      width: 1000px;
+    }
+
+    .title {
+      margin: 0 0 18px;
+      font-size: 28px;
+      line-height: 34px;
+      font-weight: 700;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 480px 480px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .panel-label {
+      margin: 0 0 7px;
+      color: var(--color-primary-60);
+      font-size: 17px;
+      line-height: 22px;
+      font-weight: 700;
+    }
+
+    .card {
+      width: 480px;
+      height: 380px;
+      padding: 10px 12px;
+      background-color: #000000;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .top-row,
+    .title-row,
+    .config-row,
+    .footer-row,
+    .bubble-meta {
+      display: flex;
+      align-items: center;
+    }
+
+    .top-row,
+    .config-row,
+    .footer-row,
+    .bubble-meta {
+      justify-content: space-between;
+    }
+
+    .top-row {
+      height: 32px;
+      margin-bottom: 8px;
+    }
+
+    .runner-logo {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+    }
+
+    .card-title {
+      font-size: 30px;
+      line-height: 32px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .chip {
+      height: 24px;
+      padding: 0 9px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      background-color: var(--color-primary-08);
+    }
+
+    .config-row {
+      height: 39px;
+      margin-bottom: 5px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+    }
+
+    .row-active {
+      border-width: 4px;
+      background-color: var(--color-primary-08);
+    }
+
+    .config-name {
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .config-value {
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+      text-align: right;
+    }
+
+    .footer-row {
+      height: 34px;
+      margin-top: 2px;
+      border-top: 1px solid var(--color-primary-40);
+    }
+
+    .footer-note {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+
+    .bubble-area {
+      display: flex;
+      flex-direction: column;
+      height: 260px;
+      gap: 8px;
+      padding-top: 2px;
+    }
+
+    .bubble {
+      width: 100%;
+      padding: 9px 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      background-color: #000000;
+    }
+
+    .bubble-active {
+      border-width: 4px;
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-08);
+    }
+
+    .bubble-text {
+      display: block;
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .bubble-meta {
+      height: 34px;
+      border-top: 1px solid var(--color-primary-40);
+    }
+  </style>
+</head>
+<body>
+  <main class="board">
+    <h1 class="title">AISmartRun AI 语音配置</h1>
+    <section class="grid">
+      <div>
+        <p class="panel-label">后台配置</p>
+        <div class="card">
+          <div class="top-row">
+            <div class="title-row">
+              <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+              <span class="card-title">语音</span>
+            </div>
+            <span class="chip">已保存</span>
+          </div>
+
+          <div class="config-row row-active">
+            <span class="config-name">播报</span>
+            <span class="config-value">开</span>
+          </div>
+          <div class="config-row">
+            <span class="config-name">EverMind</span>
+            <span class="config-value">记录</span>
+          </div>
+          <div class="config-row">
+            <span class="config-name">识别语言</span>
+            <span class="config-value">zh-CN</span>
+          </div>
+          <div class="config-row">
+            <span class="config-name">聆听超时</span>
+            <span class="config-value">5s</span>
+          </div>
+          <div class="config-row">
+            <span class="config-name">DeepSeek</span>
+            <span class="config-value">AIUI</span>
+          </div>
+          <div class="config-row">
+            <span class="config-name">兜底</span>
+            <span class="config-value">规则</span>
+          </div>
+
+          <div class="footer-row">
+            <span class="footer-note">官方模型 + 后台记录</span>
+            <span class="chip">后台</span>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <p class="panel-label">逐句气泡</p>
+        <div class="card">
+          <div class="top-row">
+            <div class="title-row">
+              <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+              <span class="card-title">教练</span>
+            </div>
+            <span class="chip">待命</span>
+          </div>
+
+          <div class="bubble-area">
+            <div class="bubble">
+              <span class="bubble-text">现在心率高吗</span>
+            </div>
+            <div class="bubble bubble-active">
+              <span class="bubble-text">心率偏高，放慢些。</span>
+            </div>
+            <div class="bubble">
+              <span class="bubble-text">肩膀放松，稳住呼吸。</span>
+            </div>
+            <div class="bubble">
+              <span class="bubble-text">配速稳定，保持。</span>
+            </div>
+          </div>
+
+          <div class="bubble-meta">
+            <span class="footer-note">来源 AIUI+EverMind</span>
+            <span class="footer-note">TTS 开</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

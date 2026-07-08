@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISmartRun Settings Preview</title>
+  <style>
+    :root {
+      --color-primary: #40ff5e;
+      --color-primary-60: rgba(64, 255, 94, 0.6);
+      --color-primary-40: rgba(64, 255, 94, 0.4);
+      --color-primary-08: rgba(64, 255, 94, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      background: #050705;
+      color: var(--color-primary);
+      font-family: Arial, "STHeiti", sans-serif;
+    }
+
+    .preview {
+      width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .preview-title {
+      margin: 0;
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .settings-wrap {
+      display: flex;
+      flex-direction: column;
+      width: 480px;
+      height: 300px;
+    }
+
+    .settings-card {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 300px;
+      padding: 10px 12px;
+      background-color: #000000;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .settings-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 32px;
+      margin-bottom: 8px;
+    }
+
+    .title-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .runner-logo {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+    }
+
+    .settings-title {
+      color: var(--color-primary);
+      font-size: 30px;
+      line-height: 32px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .status-chip {
+      height: 24px;
+      padding: 0 9px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      color: var(--color-primary);
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      background-color: var(--color-primary-08);
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 43px;
+      margin-bottom: 5px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      background-color: #000000;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .row-active {
+      border-width: 4px;
+      background-color: var(--color-primary-08);
+    }
+
+    .setting-name {
+      color: var(--color-primary);
+      font-size: 24px;
+      line-height: 30px;
+      font-weight: 700;
+    }
+
+    .setting-value {
+      color: var(--color-primary);
+      font-size: 26px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .settings-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 36px;
+      margin-top: 1px;
+      border-top: 1px solid var(--color-primary-40);
+    }
+
+    .footer-note {
+      color: var(--color-primary-60);
+      font-size: 20px;
+      line-height: 26px;
+      font-weight: 700;
+    }
+
+    .run-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 96px;
+      height: 32px;
+      border: 3px solid var(--color-primary);
+      border-radius: 12px;
+      background-color: #000000;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .run-action-text {
+      color: var(--color-primary);
+      font-size: 24px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <h1 class="preview-title">AISmartRun 设置页预览</h1>
+    <section class="settings-wrap">
+      <div class="settings-card">
+        <div class="settings-top">
+          <div class="title-row">
+            <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+            <span class="settings-title">设置</span>
+          </div>
+          <span class="status-chip" id="status">已保存</span>
+        </div>
+
+        <div class="setting-row row-active" data-index="0">
+          <span class="setting-name">步长</span>
+          <span class="setting-value" id="stride">0.85m</span>
+        </div>
+        <div class="setting-row" data-index="1">
+          <span class="setting-name">自动心率</span>
+          <span class="setting-value" id="heart">开</span>
+        </div>
+        <div class="setting-row" data-index="2">
+          <span class="setting-name">语音提示</span>
+          <span class="setting-value" id="voice">开</span>
+        </div>
+        <div class="setting-row" data-index="3">
+          <span class="setting-name">记忆增强</span>
+          <span class="setting-value" id="memory">开</span>
+        </div>
+
+        <div class="settings-footer">
+          <span class="footer-note">跑前设置</span>
+          <div class="run-action">
+            <span class="run-action-text">开跑</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const rows = Array.from(document.querySelectorAll('.setting-row'));
+    const strideOptions = [0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00];
+    const state = {
+      focus: 0,
+      strideIndex: 3,
+      heart: true,
+      voice: true,
+      memory: true,
+    };
+
+    function switchText(v) {
+      return v ? '开' : '关';
+    }
+
+    function render() {
+      rows.forEach((row, index) => {
+        row.classList.toggle('row-active', index === state.focus);
+      });
+      document.getElementById('stride').textContent = `${strideOptions[state.strideIndex].toFixed(2)}m`;
+      document.getElementById('heart').textContent = switchText(state.heart);
+      document.getElementById('voice').textContent = switchText(state.voice);
+      document.getElementById('memory').textContent = switchText(state.memory);
+      document.getElementById('status').textContent = '已保存';
+    }
+
+    function activate(index) {
+      state.focus = index;
+      if (index === 0) state.strideIndex = (state.strideIndex + 1) % strideOptions.length;
+      if (index === 1) state.heart = !state.heart;
+      if (index === 2) state.voice = !state.voice;
+      if (index === 3) state.memory = !state.memory;
+      render();
+    }
+
+    rows.forEach((row) => {
+      row.addEventListener('click', () => activate(Number(row.dataset.index)));
+    });
+
+    window.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        state.focus = (state.focus + 1) % rows.length;
+        render();
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        state.focus = (state.focus + rows.length - 1) % rows.length;
+        render();
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        activate(state.focus);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """AIUI_AISmartRun 测试入口。
 
-入口名沿用 Stop hook 的 TEST_CMD 约定（python scripts/run_tests_on_hermes.py），
+入口名沿用 Stop hook 的 TEST_CMD 约定（python3 scripts/run_tests_on_hermes.py），
 但本项目是 AIUI 眼镜端 JS 项目、没有 hermes 后端：实际在本机运行
 `node --test test/*.spec.mjs`（node:test 内置框架，零依赖）。
 测试失败原样透传退出码 —— 不吞错、不降级。

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISmartRun Bluetooth Preview</title>
+  <style>
+    :root {
+      --color-primary: #40ff5e;
+      --color-primary-60: rgba(64, 255, 94, 0.6);
+      --color-primary-40: rgba(64, 255, 94, 0.4);
+      --color-primary-08: rgba(64, 255, 94, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      background: #050705;
+      color: var(--color-primary);
+      font-family: Arial, "STHeiti", sans-serif;
+    }
+
+    .preview {
+      width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .preview-title {
+      margin: 0;
+      color: var(--color-primary);
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .device-card {
+      display: flex;
+      flex-direction: column;
+      width: 480px;
+      height: 300px;
+      padding: 10px 12px;
+      background-color: #000000;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .device-top,
+    .device-footer,
+    .title-row,
+    .actions,
+    .device-row,
+    .footer-action {
+      display: flex;
+      align-items: center;
+    }
+
+    .device-top,
+    .device-footer,
+    .device-row {
+      justify-content: space-between;
+    }
+
+    .device-top {
+      height: 32px;
+      margin-bottom: 8px;
+    }
+
+    .runner-logo {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+    }
+
+    .device-title {
+      color: var(--color-primary);
+      font-size: 30px;
+      line-height: 32px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .status-chip {
+      height: 24px;
+      padding: 0 9px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      background-color: var(--color-primary-08);
+    }
+
+    .device-row {
+      height: 43px;
+      margin-bottom: 5px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      background-color: #000000;
+    }
+
+    .row-active {
+      border-width: 4px;
+      background-color: var(--color-primary-08);
+    }
+
+    .setting-name {
+      font-size: 24px;
+      line-height: 30px;
+      font-weight: 700;
+    }
+
+    .setting-value {
+      font-size: 26px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+      text-align: right;
+    }
+
+    .device-footer {
+      height: 36px;
+      margin-top: 1px;
+      border-top: 1px solid var(--color-primary-40);
+    }
+
+    .footer-note {
+      color: var(--color-primary-60);
+      font-size: 20px;
+      line-height: 26px;
+      font-weight: 700;
+    }
+
+    .actions {
+      gap: 8px;
+    }
+
+    .footer-action {
+      justify-content: center;
+      width: 86px;
+      height: 32px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+    }
+
+    .action-primary {
+      width: 96px;
+      border-width: 4px;
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-08);
+    }
+
+    .action-text {
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <h1 class="preview-title">AISmartRun 蓝牙设备页预览</h1>
+    <section class="device-card">
+      <div class="device-top">
+        <div class="title-row">
+          <img class="runner-logo" src="../assets/smartrun-runner-48.png" alt="" />
+          <span class="device-title">设备</span>
+        </div>
+        <span class="status-chip">已记住</span>
+      </div>
+
+      <div class="device-row row-active">
+        <span class="setting-name">首选心率</span>
+        <span class="setting-value">Polar H10</span>
+      </div>
+      <div class="device-row">
+        <span class="setting-name">搜索设备</span>
+        <span class="setting-value">扫描</span>
+      </div>
+      <div class="device-row">
+        <span class="setting-name">自动心率</span>
+        <span class="setting-value">开</span>
+      </div>
+      <div class="device-row">
+        <span class="setting-name">忘记设备</span>
+        <span class="setting-value">清除</span>
+      </div>
+
+      <div class="device-footer">
+        <span class="footer-note">开跑自动连</span>
+        <div class="actions">
+          <div class="footer-action"><span class="action-text">设置</span></div>
+          <div class="footer-action action-primary"><span class="action-text">开跑</span></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

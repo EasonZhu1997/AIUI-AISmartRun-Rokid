@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AISmartRun Preview Index</title>
+  <style>
+    :root {
+      --color-primary: #40ff5e;
+      --color-primary-60: rgba(64, 255, 94, 0.6);
+      --color-primary-40: rgba(64, 255, 94, 0.4);
+      --color-primary-08: rgba(64, 255, 94, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      background: #050705;
+      color: var(--color-primary);
+      font-family: Arial, "STHeiti", sans-serif;
+    }
+
+    .page {
+      width: 940px;
+    }
+
+    h1 {
+      margin: 0 0 18px;
+      font-size: 30px;
+      line-height: 36px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 480px 420px;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .card {
+      background: #000000;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .home-card {
+      width: 480px;
+      height: 228px;
+    }
+
+    .top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 30px;
+      margin-bottom: 8px;
+    }
+
+    .brand-row {
+      display: flex;
+      align-items: center;
+    }
+
+    .runner {
+      width: 28px;
+      height: 28px;
+      margin-right: 8px;
+    }
+
+    .brand {
+      font-size: 28px;
+      line-height: 30px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+    }
+
+    .chip {
+      height: 24px;
+      padding: 0 9px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      background: var(--color-primary-08);
+    }
+
+    .mode-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 42px;
+      margin-bottom: 8px;
+      padding: 0 12px;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      background: var(--color-primary-08);
+    }
+
+    .mode-copy {
+      display: flex;
+      align-items: center;
+    }
+
+    .ready-main {
+      font-size: 28px;
+      line-height: 34px;
+      font-weight: 700;
+      font-family: Menlo, Monaco, monospace;
+      margin-right: 12px;
+    }
+
+    .ready-sub {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+
+    .device-panel {
+      display: flex;
+      flex-direction: column;
+      height: 74px;
+      margin-bottom: 8px;
+    }
+
+    .device-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 34px;
+      margin-bottom: 6px;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      padding: 0 12px;
+    }
+
+    .device-row span {
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .muted {
+      color: var(--color-primary-60);
+    }
+
+    .wait-dots {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--color-primary-40);
+    }
+
+    .dot-on {
+      background: var(--color-primary);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      height: 38px;
+    }
+
+    .action-slot {
+      display: flex;
+      width: 50%;
+      padding-right: 5px;
+    }
+
+    .action-slot-last {
+      padding-right: 0;
+      padding-left: 5px;
+    }
+
+    .action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 38px;
+      width: 100%;
+      border: 2px solid var(--color-primary-60);
+      border-radius: 12px;
+      color: var(--color-primary);
+      text-decoration: none;
+      font-size: 24px;
+      line-height: 30px;
+      font-weight: 700;
+    }
+
+    .action-primary {
+      border-width: 3px;
+      border-color: var(--color-primary);
+      background: var(--color-primary-08);
+    }
+
+    .flow-card {
+      width: 420px;
+    }
+
+    .flow-title {
+      margin: 0 0 10px;
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+
+    .node {
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      padding: 9px 12px;
+      background: #000000;
+    }
+
+    .node-main {
+      display: block;
+      font-size: 22px;
+      line-height: 28px;
+      font-weight: 700;
+    }
+
+    .node-sub {
+      display: block;
+      color: var(--color-primary-60);
+      font-size: 16px;
+      line-height: 21px;
+      font-weight: 700;
+    }
+
+    .arrow {
+      color: var(--color-primary-60);
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 700;
+      padding-left: 14px;
+    }
+
+    .links {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .link-card {
+      color: var(--color-primary);
+      text-decoration: none;
+      border: 2px solid var(--color-primary-40);
+      border-radius: 12px;
+      padding: 11px 12px;
+      background: #000000;
+      font-size: 18px;
+      line-height: 24px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>AISmartRun 预览入口</h1>
+    <section class="grid">
+      <div class="card home-card">
+        <div class="top">
+          <div class="brand-row">
+            <img class="runner" src="../assets/smartrun-runner-48.png" alt="" />
+            <span class="brand">AISmartRun</span>
+          </div>
+          <span class="chip">已记住</span>
+        </div>
+        <div class="mode-strip">
+          <div class="mode-copy">
+            <span class="ready-main">自由跑</span>
+            <span class="ready-sub">开跑自动连</span>
+          </div>
+          <div class="wait-dots" aria-hidden="true">
+            <span class="dot dot-on"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+        </div>
+        <div class="device-panel">
+          <div class="device-row">
+            <span>单眼镜</span>
+            <span>已就绪</span>
+          </div>
+          <div class="device-row">
+            <span>心率</span>
+            <span class="muted">已记住</span>
+          </div>
+        </div>
+        <div class="actions">
+          <div class="action-slot">
+            <a class="action" href="./aismartrun-bluetooth-preview.html">设备</a>
+          </div>
+          <div class="action-slot action-slot-last">
+            <a class="action action-primary" href="./aismartrun-all-ui-preview.html">开跑</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="card flow-card">
+        <p class="flow-title">页面触发流程</p>
+        <div class="flow">
+          <div class="node">
+            <span class="node-main">1. 首页：就绪</span>
+            <span class="node-sub">默认入口。单眼镜已就绪，心率已记住，开跑自动连。</span>
+          </div>
+          <div class="arrow">点设备</div>
+          <div class="node">
+            <span class="node-main">2. 蓝牙设备页</span>
+            <span class="node-sub">搜索并记住首选心率，可开关自动心率。</span>
+          </div>
+          <div class="arrow">开跑 / Enter / GlobalHook</div>
+          <div class="node">
+            <span class="node-main">3. 跑步 HUD</span>
+            <span class="node-sub">进入后自动记录；优先连接首选心率。</span>
+          </div>
+          <div class="arrow">心率 notify 有效</div>
+          <div class="node">
+            <span class="node-main">4. 心率同屏</span>
+            <span class="node-sub">同一张 HUD 补充心率和区间点阵。</span>
+          </div>
+          <div class="arrow">问教练 / 语音唤醒</div>
+          <div class="node">
+            <span class="node-main">5. AI 教练</span>
+            <span class="node-sub">官方 AIUI 短答，EverMind 记录。</span>
+          </div>
+          <div class="arrow">设备页点设置</div>
+          <div class="node">
+            <span class="node-main">设置页</span>
+            <span class="node-sub">改步长、自动心率、语音提示、记忆增强；可直接开跑。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="links">
+      <a class="link-card" href="./aismartrun-all-ui-preview.html">全部 UI 总览</a>
+      <a class="link-card" href="./aismartrun-home-waiting-preview.html">首页预览</a>
+      <a class="link-card" href="./aismartrun-bluetooth-preview.html">蓝牙设备页</a>
+      <a class="link-card" href="./aismartrun-ai-voice-config-preview.html">AI 语音配置</a>
+      <a class="link-card" href="./aismartrun-settings-preview.html">设置页预览</a>
+      <a class="link-card" href="./aismartrun-ui-preview.html">HUD / 教练预览</a>
+    </section>
+  </main>
+</body>
+</html>
